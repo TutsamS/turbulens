@@ -1,0 +1,654 @@
+.prediction-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.route-info {
+  background: #f7fafc;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.route {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 16px;
+}
+
+.prediction-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.turbulence-level {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: #f7fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.level-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.level-icon {
+  font-size: 24px;
+}
+
+.confidence {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.confidence-label {
+  font-size: 12px;
+  color: #718096;
+  font-weight: 500;
+}
+
+.confidence-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.factors h3,
+.recommendations h3 {
+  color: #2d3748;
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+
+.factors-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.factor-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f5f9;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+.factor-item:last-child {
+  border-bottom: none;
+}
+
+.factor-icon {
+  color: #667eea;
+  font-weight: bold;
+  font-size: 16px;
+  margin-top: 2px;
+}
+
+.recommendation-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.rec-card {
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.rec-card h4 {
+  color: #2d3748;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.rec-card p {
+  color: #718096;
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .header-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .turbulence-level {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  
+  .confidence {
+    align-items: flex-start;
+  }
+  
+  .recommendation-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* High-altitude disclaimer styling */
+.high-altitude-disclaimer {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.disclaimer-icon {
+  font-size: 20px;
+  margin-top: 2px;
+}
+
+.disclaimer-content h4 {
+  color: #856404;
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.disclaimer-content p {
+  color: #856404;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.disclaimer-content strong {
+  color: #6b5b00;
+}
+
+/* NWS Logo Styling */
+.nws-logo-small {
+  height: 24px;
+  width: auto;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+/* G-AIRMET Explanation Section */
+.gairmet-explanation {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(29, 78, 216, 0.06) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: 16px;
+  padding: 24px;
+  margin: 24px 0;
+  backdrop-filter: blur(8px);
+}
+
+.explanation-dropdown {
+  width: 100%;
+}
+
+.explanation-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.explanation-summary::-webkit-details-marker {
+  display: none;
+}
+
+.explanation-summary h3 {
+  color: #0369a1;
+  margin: 0;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dropdown-arrow {
+  font-size: 16px;
+  color: #0369a1;
+  transition: transform 0.3s ease;
+  font-weight: bold;
+}
+
+.explanation-dropdown[open] .dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.explanation-content {
+  margin-top: 20px;
+}
+
+.explanation-content p {
+  color: #0c4a6e;
+  font-size: 16px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.explanation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+}
+
+.explanation-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  border: 1px solid rgba(186, 230, 253, 0.5);
+  backdrop-filter: blur(10px);
+}
+
+.explanation-icon {
+  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  border-radius: 50%;
+  color: white;
+  flex-shrink: 0;
+}
+
+.explanation-item h4 {
+  color: #0c4a6e;
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.explanation-item p {
+  color: #0c4a6e;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.explanation-note {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(186, 230, 253, 0.6);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 24px;
+}
+
+.explanation-note p {
+  color: #0c4a6e;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.explanation-note strong {
+  color: #0369a1;
+}
+
+.official-link {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(186, 230, 253, 0.8);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 20px;
+}
+
+.official-link p {
+  margin: 0;
+  color: #0c4a6e;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.official-link a {
+  color: #0369a1;
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px solid #0369a1;
+  transition: all 0.3s ease;
+  padding: 2px 4px;
+  border-radius: 4px;
+  margin: 0 2px;
+}
+
+.official-link a:hover {
+  color: #0ea5e9;
+  border-bottom-color: #0ea5e9;
+  background: rgba(14, 165, 233, 0.1);
+}
+
+/* G-AIRMET Advisories Styling */
+.gairmet-advisories {
+  margin: 24px 0;
+}
+
+.gairmet-advisories h3 {
+  color: #dc2626;
+  margin-bottom: 16px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.advisory-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.advisory-card {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 16px;
+  border-left: 4px solid #dc2626;
+}
+
+.advisory-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.advisory-type {
+  background: #dc2626;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.advisory-severity {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.advisory-severity.light {
+  background: #16a34a;
+  color: white;
+}
+
+.advisory-severity.moderate {
+  background: #ea580c;
+  color: white;
+}
+
+.advisory-severity.severe {
+  background: #dc2626;
+  color: white;
+}
+
+.advisory-details p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #374151;
+}
+
+.advisory-details strong {
+  color: #1f2937;
+}
+
+.advisory-details .area-info {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 4px 0;
+  font-weight: 500;
+  color: #374151;
+}
+
+
+
+/* Responsive Design for G-AIRMET Explanation */
+@media (max-width: 768px) {
+  .gairmet-explanation {
+    padding: 20px;
+    margin: 20px 0;
+  }
+  
+  .gairmet-explanation h3 {
+    font-size: 18px;
+  }
+  
+  .explanation-content p {
+    font-size: 15px;
+  }
+  
+  .explanation-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  
+  .explanation-item {
+    padding: 16px;
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .explanation-icon {
+    align-self: center;
+  }
+  
+  .explanation-item h4 {
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  
+  .explanation-item p {
+    font-size: 13px;
+  }
+  
+  .explanation-note {
+    padding: 16px;
+    margin-top: 20px;
+  }
+  
+  .explanation-note p {
+    font-size: 14px;
+  }
+  
+  .explanation-summary h3 {
+    font-size: 16px;
+  }
+  
+  .nws-logo-small {
+    height: 20px;
+    margin-right: 6px;
+  }
+  
+  .dropdown-arrow {
+    font-size: 14px;
+  }
+  
+  .official-link {
+    padding: 12px;
+    margin-top: 16px;
+  }
+  
+  .official-link p {
+    font-size: 14px;
+  }
+} 
+
+/* G-AIRMET Impact Section */
+.gairmet-impact {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(29, 78, 216, 0.06) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: 16px;
+  padding: 24px;
+  margin: 24px 0;
+  backdrop-filter: blur(8px);
+}
+
+.gairmet-impact h3 {
+  color: #2d3748;
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.impact-content {
+  color: #4a5568;
+}
+
+.impact-explanation > p {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  color: #2d3748;
+}
+
+.pilot-planning, .turbulence-reality {
+  margin-bottom: 24px;
+}
+
+.pilot-planning h4, .turbulence-reality h4 {
+  color: #2d3748;
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pilot-planning p, .turbulence-reality p {
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.pilot-planning ul, .turbulence-reality ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+
+.pilot-planning li, .turbulence-reality li {
+  padding: 6px 0;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.pilot-planning li:before, .turbulence-reality li:before {
+  content: "✓";
+  color: #48bb78;
+  font-weight: bold;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.confidence-note {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 20px;
+  backdrop-filter: blur(5px);
+}
+
+.confidence-note p {
+  margin: 0;
+  font-weight: 500;
+  color: #2d3748;
+  line-height: 1.5;
+} 
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .gairmet-impact {
+    padding: 20px;
+    margin: 20px 0;
+  }
+  
+  .gairmet-impact h3 {
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+  }
+  
+  .impact-explanation > p {
+    font-size: 1rem;
+    margin-bottom: 16px;
+  }
+  
+  .pilot-planning h4, .turbulence-reality h4 {
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+  }
+  
+  .pilot-planning, .turbulence-reality {
+    margin-bottom: 20px;
+  }
+  
+  .confidence-note {
+    padding: 14px;
+    margin-top: 16px;
+  }
+} 
+
+/* Card Styles */
+.card {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(15px);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+  margin: 24px 0;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+} 
