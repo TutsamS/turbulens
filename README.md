@@ -80,6 +80,7 @@ TurbuLens is an AI-powered flight turbulence prediction system that provides rea
   1. Sign up at OpenWeatherMap
   2. Get your API key
   3. Add to `.env` file: `OPENWEATHER_API_KEY=your_key_here`
+  4. Also add your key to line 32 and line 234 in FlightMap.js for frontend weather map capabilities.
 
 ### OpenAI API
 - **Purpose**: AI-powered turbulence analysis and predictions
