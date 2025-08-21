@@ -31,7 +31,7 @@ TurbuLens is an AI-powered flight turbulence prediction system that provides rea
 1. **Clone the repository**
    ```bash
    git clone https://github.com/TutsamS/turbulens
-   cd flight-turbulence-predictor
+   cd turbulens
    ```
 
 2. **Install backend dependencies**
