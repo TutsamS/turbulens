@@ -26,13 +26,20 @@ const validateFlightData = (data) => {
     if (!dateRegex.test(data.date)) {
       errors.push('Date must be in YYYY-MM-DD format');
     } else {
-      const inputDate = new Date(data.date);
+      const inputDate = new Date(data.date + 'T00:00:00');
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
+      // Allow today and future dates
       if (inputDate < today) {
         errors.push('Date cannot be in the past');
       }
+      
+      // Optional: Add some debugging
+      console.log('🔍 Date validation debug:');
+      console.log('  Input date:', data.date, '→', inputDate.toISOString());
+      console.log('  Today (midnight):', today.toISOString());
+      console.log('  Is input < today?', inputDate < today);
     }
   }
 
