@@ -315,10 +315,13 @@ class SimpleRouteService {
       arrAirport.lat, arrAirport.lng
     );
     
+                  // Calculate dynamic confidence based on multiple factors
+                  const confidence = this.calculateConfidence(weatherData, gairmetAdvisories, waypoints, distance);
+                  
                   // Create route object matching frontend expectations
         const route = {
           turbulenceLevel: turbulenceLevel,
-          confidence: gairmetAdvisories?.hasAdvisories ? 0.95 : 0.85, // Convert to numeric
+          confidence: confidence,
           factors: this.generateTurbulenceFactors(turbulenceLevel, weatherData, gairmetAdvisories),
           route: {
             departure: departure,
@@ -328,23 +331,7 @@ class SimpleRouteService {
           weatherData: weatherData, // Add weather data for waypoint display
           gairmetAdvisories: gairmetAdvisories,
           allGairmets: allGairmets,
-          recommendations: [
-            {
-              icon: '🛡️',
-              type: 'Safety',
-              text: 'Keep seatbelt fastened throughout the flight'
-            },
-            {
-              icon: '📅',
-              type: 'Updates',
-              text: 'Check for real-time weather updates'
-            },
-            {
-              icon: '⏰',
-              type: 'Timing',
-              text: 'Consider alternative departure times if possible'
-            }
-          ],
+          recommendations: this.generateRecommendations(turbulenceLevel, distance, gairmetAdvisories),
           distance: Math.round(distance),
           estimatedDuration: this.estimateFlightTime(distance),
           generatedAt: new Date().toISOString()
@@ -369,6 +356,211 @@ class SimpleRouteService {
               Math.sin(dLng/2) * Math.sin(dLng/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c;
+  }
+
+  // Generate intelligent, level-appropriate recommendations
+  static generateRecommendations(turbulenceLevel, distance, gairmetAdvisories) {
+    const recommendations = [];
+    
+    // Base recommendations for all flights
+    recommendations.push({
+      icon: '✈️',
+      type: 'Flight Info',
+      text: 'Your pilots are highly trained professionals who handle these conditions daily'
+    });
+    
+    recommendations.push({
+      icon: '🛡️',
+      type: 'Safety',
+      text: 'Keep your seatbelt fastened when seated - this is standard safety practice'
+    });
+    
+    // Level-specific recommendations
+    switch (turbulenceLevel.toLowerCase()) {
+      case 'none':
+        recommendations.push({
+          icon: '☀️',
+          type: 'Conditions',
+          text: 'Excellent flying conditions - expect a smooth, comfortable flight'
+        });
+        recommendations.push({
+          icon: '📱',
+          type: 'Comfort',
+          text: 'Feel free to use electronic devices and move about the cabin'
+        });
+        break;
+        
+      case 'light':
+        recommendations.push({
+          icon: '🌤️',
+          type: 'What to Expect',
+          text: 'You may feel gentle movements - similar to driving on a slightly bumpy road'
+        });
+        recommendations.push({
+          icon: '💧',
+          type: 'Hydration',
+          text: 'Stay hydrated - this helps with any minor motion sensitivity'
+        });
+        break;
+        
+      case 'light to moderate':
+        recommendations.push({
+          icon: '🌤️',
+          type: 'What to Expect',
+          text: 'Some noticeable movement - like driving on a country road with occasional bumps'
+        });
+        recommendations.push({
+          icon: '🎵',
+          type: 'Comfort',
+          text: 'Listening to music or podcasts can help you relax during any bumps'
+        });
+        break;
+        
+      case 'moderate':
+        recommendations.push({
+          icon: '⛈️',
+          type: 'What to Expect',
+          text: 'Moderate movement - similar to driving on a gravel road. This is normal and safe'
+        });
+        recommendations.push({
+          icon: '🧘',
+          type: 'Relaxation',
+          text: 'Practice deep breathing - turbulence is temporary and your pilots are in control'
+        });
+        recommendations.push({
+          icon: '📚',
+          type: 'Distraction',
+          text: 'Reading or watching content can help take your mind off any movement'
+        });
+        break;
+        
+      case 'moderate to severe':
+        recommendations.push({
+          icon: '⛈️',
+          type: 'What to Expect',
+          text: 'More noticeable movement - like driving on a rough road. Still completely safe'
+        });
+        recommendations.push({
+          icon: '👨‍✈️',
+          type: 'Pilot Expertise',
+          text: 'Your pilots may adjust altitude or route to find smoother air'
+        });
+        recommendations.push({
+          icon: '💪',
+          type: 'Comfort',
+          text: 'Focus on the fact that millions of flights handle this safely every day'
+        });
+        break;
+        
+      case 'severe':
+        recommendations.push({
+          icon: '⚡',
+          type: 'What to Expect',
+          text: 'Significant movement - pilots will actively work to minimize this'
+        });
+        recommendations.push({
+          icon: '🔄',
+          type: 'Pilot Actions',
+          text: 'Your pilots will likely change altitude or route to find calmer conditions'
+        });
+        recommendations.push({
+          icon: '🛡️',
+          type: 'Safety First',
+          text: 'This is why we predict turbulence - so pilots can plan accordingly'
+        });
+        break;
+        
+      default:
+        recommendations.push({
+          icon: 'ℹ️',
+          type: 'General',
+          text: 'Your flight crew is monitoring conditions and will keep you informed'
+        });
+    }
+    
+    // Add route-specific recommendations
+    if (distance > 2000) {
+      recommendations.push({
+        icon: '🌍',
+        type: 'Long Flight',
+        text: 'On longer flights, pilots have more options to find optimal routes'
+      });
+    }
+    
+    if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
+      recommendations.push({
+        icon: '📡',
+        type: 'Advanced Warning',
+        text: 'G-AIRMET data gives pilots early warning to plan optimal routes'
+      });
+    }
+    
+    // Add comfort tips
+    recommendations.push({
+      icon: '🎯',
+      type: 'Remember',
+      text: 'Turbulence is normal weather - like bumps in the road. Airplanes are designed to handle all levels of turbulence'
+    });
+    
+    return recommendations;
+  }
+
+  // Calculate dynamic confidence based on multiple factors
+  static calculateConfidence(weatherData, gairmetAdvisories, waypoints, distance) {
+    let confidence = 0.5; // Base confidence starts at 50%
+    
+    // Factor 1: Weather data coverage (0-20 points)
+    if (weatherData && weatherData.length > 0) {
+      const dataCoverage = Math.min(weatherData.length / waypoints.length, 1);
+      confidence += dataCoverage * 0.2;
+    }
+    
+    // Factor 2: G-AIRMET advisories (0-25 points)
+    if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
+      const advisoryCount = gairmetAdvisories.advisories.length;
+      // More advisories = higher confidence (up to 25 points)
+      confidence += Math.min(advisoryCount * 0.05, 0.25);
+    }
+    
+    // Factor 3: Route complexity (0-15 points)
+    // Shorter routes are generally more predictable
+    if (distance < 500) {
+      confidence += 0.15; // High confidence for short routes
+    } else if (distance < 1500) {
+      confidence += 0.10; // Medium confidence for medium routes
+    } else {
+      confidence += 0.05; // Lower confidence for long routes
+    }
+    
+    // Factor 4: Weather data quality (0-20 points)
+    if (weatherData && weatherData.length > 0) {
+      let qualityScore = 0;
+      weatherData.forEach(waypoint => {
+        if (waypoint.temperature && waypoint.windSpeed && waypoint.pressure) {
+          qualityScore += 1;
+        }
+      });
+      const avgQuality = qualityScore / weatherData.length;
+      confidence += avgQuality * 0.20;
+    }
+    
+    // Factor 5: Atmospheric stability (0-20 points)
+    // This is a simplified calculation - in reality, this would be more complex
+    if (weatherData && weatherData.length > 0) {
+      let stabilityScore = 0;
+      weatherData.forEach(waypoint => {
+        if (waypoint.windSpeed < 50) stabilityScore += 1; // Low wind = more stable
+        if (waypoint.pressure && waypoint.pressure > 1000) stabilityScore += 1; // Higher pressure = more stable
+      });
+      const avgStability = stabilityScore / (weatherData.length * 2);
+      confidence += avgStability * 0.20;
+    }
+    
+    // Ensure confidence is between 0.3 and 0.98
+    confidence = Math.max(0.3, Math.min(0.98, confidence));
+    
+    // Round to 2 decimal places
+    return Math.round(confidence * 100) / 100;
   }
 
   // Estimate flight time based on distance

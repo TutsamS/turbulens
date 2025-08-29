@@ -19,6 +19,9 @@ function App() {
     
     try {
       // This will be replaced with actual API call
+      console.log('🚀 Sending API request to:', '/api/turbulence/predict');
+      console.log('📤 Request data:', flightData);
+      
       const response = await fetch('/api/turbulence/predict', {
         method: 'POST',
         headers: {
@@ -27,14 +30,20 @@ function App() {
         body: JSON.stringify(flightData),
       });
 
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response ok:', response.ok);
+
       if (!response.ok) {
-        throw new Error('Failed to get prediction');
+        const errorText = await response.text();
+        console.log('❌ Error response body:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('✅ API response data:', data);
       setPredictionData(data);
     } catch (err) {
-      console.log('API call failed, using mock data:', err.message);
+      console.log('❌ API call failed, using mock data:', err.message);
       // For demo purposes, create mock data with proper structure
       const mockData = {
         turbulenceLevel: 'Moderate',
@@ -90,6 +99,13 @@ function App() {
     setIsSearchOpen(false);
   };
 
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const handleHomeClick = () => {
     // Reset to home screen
     setPredictionData(null);
@@ -111,6 +127,8 @@ function App() {
       <Header 
         onHomeClick={handleHomeClick} 
         onAboutClick={handleAboutClick}
+        scrollToSection={scrollToSection}
+        predictionData={predictionData}
       />
       <div className="container">
         <div className="main-content">
@@ -200,13 +218,15 @@ function App() {
               <TurbulencePrediction 
                 data={predictionData} 
               />
-              <FlightMap 
-                selectedRoute={{
-                  departure: predictionData.route.departure,
-                  arrival: predictionData.route.arrival
-                }}
-                predictionData={predictionData} 
-              />
+              <div id="flightmap">
+                <FlightMap 
+                  selectedRoute={{
+                    departure: predictionData.route.departure,
+                    arrival: predictionData.route.arrival
+                  }}
+                  predictionData={predictionData} 
+                />
+              </div>
               {/* Add button to analyze another route */}
               <div className="analyze-another">
                 <button className="btn" onClick={openSearch}>

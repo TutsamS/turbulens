@@ -4,12 +4,17 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './FlightMap.css';
 
+// Import Leaflet marker icons for Vite
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
 // Fix for default markers in React Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
-  iconUrl: require('leaflet/dist/images/marker-icon.png'),
-  shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
 });
 
 const FlightMap = ({ selectedRoute, predictionData }) => {
@@ -460,18 +465,18 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
         {selectedRouteData ? (
           <>
             <div className="route-summary">
-              <h4>🌍 Flight Route Summary</h4>
+              <h4>Flight Route Summary</h4>
               <div className="route-details">
                 <div className="route-item">
-                  <span className="route-label">✈️ Route:</span>
+                  <span className="route-label">Route:</span>
                   <span className="route-value">{selectedRouteData.departure} → {selectedRouteData.arrival}</span>
                 </div>
                 <div className="route-item">
-                  <span className="route-label">📏 Distance:</span>
+                  <span className="route-label">Distance:</span>
                   <span className="route-value">{selectedRouteData.distance || 'Unknown'} miles</span>
                 </div>
                 <div className="route-item">
-                  <span className="route-label">⏱️ Duration:</span>
+                  <span className="route-label">Duration:</span>
                   <span className="route-value">{selectedRouteData.avgDuration || 'Unknown'}</span>
                 </div>
                 {selectedRouteData.gairmetAdvisories && selectedRouteData.gairmetAdvisories.hasAdvisories && (
@@ -483,7 +488,7 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
                   </div>
                 )}
                 <div className="route-item">
-                  <span className="route-label">🌤️ Weather Layer:</span>
+                  <span className="route-label">Weather Layer:</span>
                   <span className="route-value weather-layer-badge">
                     {weatherLayerAvailable ? currentLayer?.name : 'API Key Required'}
                   </span>
