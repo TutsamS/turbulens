@@ -157,7 +157,7 @@ function App() {
                   </p>
                 </div>
                 <button className="btn btn-large" onClick={openSearch}>
-                ☁️ Start Flight Analysis
+                Start Flight Analysis
                 </button>
                 
                 <div className="mission-statement">
@@ -230,7 +230,7 @@ function App() {
               {/* Add button to analyze another route */}
               <div className="analyze-another">
                 <button className="btn" onClick={openSearch}>
-                  🔄 Analyze Another Route
+                  Analyze Another Route
                 </button>
               </div>
             </>

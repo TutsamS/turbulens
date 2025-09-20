@@ -47,7 +47,7 @@ function TurbulencePrediction({ data }) {
         </div>
         <div className="route-info">
           <span className="route">
-            {data.route.departure} → {data.route.arrival}
+            {data.route.departure} → {data.route.arrival} 
           </span>
         </div>
       </div>
@@ -152,7 +152,7 @@ function TurbulencePrediction({ data }) {
                 {getTurbulenceIcon(data.turbulenceLevel)}
               </div>
               <div className="prediction-details">
-                <div className="prediction-level">{data.turbulenceLevel}</div>
+                <div className="prediction-level">{data.turbulenceLevel.charAt(0).toUpperCase() + data.turbulenceLevel.slice(1)}</div>
                 <div className="prediction-subtitle">
                   Based on current weather patterns and G-AIRMET data
                 </div>
@@ -174,23 +174,38 @@ function TurbulencePrediction({ data }) {
           </div>
         </div>
 
-         <div id="expectations" className="factors">
-           <h3>What to Expect</h3>
-           <ul className="factors-list">
-             {data.factors.map((factor, index) => (
-               <li key={index} className="factor-item">
-                 <span className="factor-icon">•</span>
-                 {factor}
-               </li>
-             ))}
-           </ul>
-         </div>
+         {/* AI Analysis Summary Section */}
+         {data.aiSummary ? (
+           <div id="ai-analysis" className="ai-analysis-section">
+             <div className="section-header">
+               <h3>AI Analysis</h3>
+               <span className="ai-badge">Enhanced Prediction</span>
+             </div>
+             <div className="ai-summary-card">
+               <div className="ai-summary-content">
+                 <p>{data.aiSummary}</p>
+               </div>
+             </div>
+           </div>
+         ) : (
+           <div id="expectations" className="factors">
+             <h3>What to Expect</h3>
+             <ul className="factors-list">
+               {data.factors.map((factor, index) => (
+                 <li key={index} className="factor-item">
+                   <span className="factor-icon">•</span>
+                   {factor}
+                 </li>
+               ))}
+             </ul>
+           </div>
+         )}
 
          {/* G-AIRMET Information Section - Consolidated and Organized */}
          <div id="gairmet" className="gairmet-section">
            <div className="section-header">
              <img 
-               src="https://aviationweather.gov/assets/NWS_logo-BZtavOX9.svg" 
+               src="/images/NWS-Logo.svg" 
                alt="NWS Logo" 
                className="nws-logo-small"
              />
@@ -221,7 +236,7 @@ function TurbulencePrediction({ data }) {
                        </div>
                        <div className="detail-row">
                          <span className="detail-label">Altitude:</span>
-                         <span className="detail-value">FL{advisory.altitude.min/100}-FL{advisory.altitude.max/100}</span>
+                         <span className="detail-value">{advisory.altitude.min*100}-{advisory.altitude.max*100} feet</span>
                        </div>
                        <div className="detail-row">
                          <span className="detail-label">Valid:</span>
@@ -319,7 +334,6 @@ function TurbulencePrediction({ data }) {
              </details>
            </div>
         </div>
-
 
         <div id="recommendations" className="recommendations">
           <h3>Recommendations</h3>
