@@ -66,9 +66,8 @@ TurbuLens is an AI-powered flight turbulence prediction system that provides rea
    npm start
    ```
 
-8. **Open your browser**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5000
+8. **Open your browser and paste this link**
+   - http://localhost:3000
 
 ## 🔑 Required API Keys
 
@@ -98,63 +97,7 @@ PORT=5000
 OPENWEATHER_API_KEY=your_openweather_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 
-# Optional: Customize server settings
-NODE_ENV=development
 ```
-
-## 📁 Project Structure
-
-```
-flight-turbulence-predictor/
-├── backend/                 # Node.js/Express server
-│   ├── routes/             # API endpoints
-│   ├── services/           # Business logic
-│   ├── server.js           # Main server file
-│   └── package.json        # Backend dependencies
-├── frontend/               # React application
-│   ├── public/             # Static assets
-│   │   └── images/         # Logo and icons
-│   ├── src/                # React source code
-│   │   ├── components/     # React components
-│   │   ├── App.js          # Main application
-│   │   └── index.js        # Entry point
-│   └── package.json        # Frontend dependencies
-└── README.md               # This file
-```
-
-## 🛠️ Development
-
-### Available Scripts
-
-**Backend:**
-```bash
-npm start          # Start production server
-npm run dev        # Start development server with nodemon
-```
-
-**Frontend:**
-```bash
-npm start          # Start development server
-npm run build      # Build for production
-```
-
-## 🌐 Production Deployment
-
-### Backend Deployment
-1. Set `NODE_ENV=production` in your environment
-2. Ensure all API keys are configured
-3. Use a process manager like PM2:
-   ```bash
-   npm install -g pm2
-   pm2 start server.js --name "turbulens-backend"
-   ```
-
-### Frontend Deployment
-1. Build the production version:
-   ```bash
-   npm run build
-   ```
-2. Deploy the `build/` folder to your hosting service
 
 ## 🐛 Troubleshooting
 
