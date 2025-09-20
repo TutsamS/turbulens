@@ -167,7 +167,7 @@ function FlightSearch({ onSearch, isOpen, onClose }) {
             </div>
             
             <button type="submit" className="btn">
-            ☁️ Predict Turbulence
+            Predict Turbulence
             </button>
           </form>
           
