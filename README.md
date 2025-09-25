@@ -4,7 +4,7 @@
 
 TurbuLens is an AI-powered flight turbulence prediction system that provides real-time weather analysis and turbulence forecasts for nervous flyers.
 
-## 🌟 Features
+## Features
 
 - **AI-Powered Predictions**: Advanced machine learning algorithms for accurate turbulence forecasting
 - **Real-Time Weather Data**: Live weather information from global weather stations
@@ -99,7 +99,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -117,7 +117,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 - Check API rate limits
 - Ensure backend server is running
 
-## 🎯 Mission
+## Mission
 
 We're committed to making air travel less stressful for everyone. By providing free, accurate turbulence predictions, we hope to help nervous flyers feel more confident and prepared for their journeys.
 
