@@ -84,7 +84,7 @@ TurbuLens is an AI-powered flight turbulence prediction system that provides rea
 ### OpenAI API
 - **Purpose**: AI-powered turbulence analysis and predictions
 - **Get Key**: [OpenAI API](https://platform.openai.com/api-keys)
-- **Cost**: Pay-per-use (very affordable for small projects)
+- **Cost**: Pay-per-use
 - **Setup**: 
   1. Sign up at OpenAI
   2. Get your API key
