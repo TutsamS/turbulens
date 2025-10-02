@@ -69,7 +69,7 @@ TurbuLens is an AI-powered flight turbulence prediction system that provides rea
 8. **Open your browser and paste this link**
    - http://localhost:3000
 
-## 🔑 Required API Keys
+## Required API Keys
 
 ### OpenWeatherMap API
 - **Purpose**: Real-time weather data for flight routes
