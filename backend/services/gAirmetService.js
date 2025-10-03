@@ -146,9 +146,11 @@ class GAirmetService {
       // Extract altitude information
       let altitude = { min: 0, max: 999999 };
       if (gairmet.top || gairmet.base) {
+        const minAlt = gairmet.base ? parseInt(gairmet.base) : 0;
+        const maxAlt = gairmet.top ? parseInt(gairmet.top) : 999999;
         altitude = {
-          min: gairmet.base ? parseInt(gairmet.base) : 0,
-          max: gairmet.top ? parseInt(gairmet.top) : 999999
+          min: isNaN(minAlt) ? 0 : minAlt,
+          max: isNaN(maxAlt) ? 999999 : maxAlt
         };
       }
 
@@ -305,9 +307,11 @@ class GAirmetService {
   static extractAltitudeInfo(xmlString) {
     const altitudeMatch = xmlString.match(/<altitude\s+min_ft_msl="([^"]+)"\s+max_ft_msl="([^"]+)"/i);
     if (altitudeMatch) {
+      const minAlt = parseInt(altitudeMatch[1]);
+      const maxAlt = parseInt(altitudeMatch[2]);
       return {
-        min: parseInt(altitudeMatch[1]),
-        max: parseInt(altitudeMatch[2])
+        min: isNaN(minAlt) ? 0 : minAlt,
+        max: isNaN(maxAlt) ? 999999 : maxAlt
       };
     }
     return { min: 0, max: 999999 };
@@ -391,9 +395,12 @@ class GAirmetService {
       const match = altitudeText.match(/(?:FL)?(\d+)(?:-(?:FL)?(\d+))?/i);
       
       if (match) {
-        const min = match[1] ? parseInt(match[1]) * 100 : 0; // FL180 = 18000 feet
-        const max = match[2] ? parseInt(match[2]) * 100 : 999999;
-        return { min, max };
+        const minRaw = match[1] ? parseInt(match[1]) * 100 : 0; // FL180 = 18000 feet
+        const maxRaw = match[2] ? parseInt(match[2]) * 100 : 999999;
+        return { 
+          min: isNaN(minRaw) ? 0 : minRaw, 
+          max: isNaN(maxRaw) ? 999999 : maxRaw 
+        };
       }
       
       return { min: 0, max: 999999 };
