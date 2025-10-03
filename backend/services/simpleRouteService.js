@@ -317,10 +317,10 @@ class SimpleRouteService {
 
     // Calculate weighted average severity
     const totalWeight = advisoryAnalysis.reduce((sum, analysis) => sum + analysis.impactWeight, 0);
-    const weightedSeverity = advisoryAnalysis.reduce((sum, analysis) => {
+    const weightedSeverity = totalWeight > 0 ? advisoryAnalysis.reduce((sum, analysis) => {
       const severityValue = this.getSeverityValue(analysis.severity);
       return sum + (severityValue * analysis.impactWeight);
-    }, 0) / totalWeight;
+    }, 0) / totalWeight : 3; // Default to 'Moderate' if no weight
 
     // Determine recommended level based on weighted analysis
     const recommendedLevel = this.getSeverityFromValue(weightedSeverity);
@@ -772,7 +772,7 @@ Keep it clear, professional, and easy to understand.`;
     let confidence = 0.3; // Base confidence starts at 30% (lower baseline)
     
     // Factor 1: Weather data coverage (0-15 points)
-    if (weatherData && weatherData.length > 0) {
+    if (weatherData && weatherData.length > 0 && waypoints && waypoints.length > 0) {
       const dataCoverage = Math.min(weatherData.length / waypoints.length, 1);
       confidence += dataCoverage * 0.15;
     }
@@ -783,7 +783,7 @@ Keep it clear, professional, and easy to understand.`;
       
       // Dynamic base boost based on G-AIRMET severity and coverage
       const advisoryCount = gairmetAdvisories.advisories.length;
-      const avgWeight = gairmetAnalysis.totalWeight / advisoryCount;
+      const avgWeight = advisoryCount > 0 ? gairmetAnalysis.totalWeight / advisoryCount : 0;
       
       // Base confidence boost varies by advisory quality (15-35%)
       let baseGairmetBoost = 0.15 + (avgWeight * 0.15); // 15-30% base boost
@@ -876,8 +876,8 @@ Keep it clear, professional, and easy to understand.`;
         }
       });
       
-      const avgQuality = qualityScore / totalPossible;
-      const consistencyBonus = Math.min(dataConsistencyScore / (weatherData.length - 1), 0.05); // Up to 5% bonus for consistency
+      const avgQuality = totalPossible > 0 ? qualityScore / totalPossible : 0;
+      const consistencyBonus = weatherData.length > 1 ? Math.min(dataConsistencyScore / (weatherData.length - 1), 0.05) : 0; // Up to 5% bonus for consistency
       
       confidence += (avgQuality * 0.15) + consistencyBonus;
     }
