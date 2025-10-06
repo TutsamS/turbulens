@@ -554,7 +554,7 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
      console.log('🌤️ Fetching weather data...');
      const weatherData = await this.getWeatherForCoordinates(waypoints);
      
-     // Get G-AIRMET turbulence advisories for enhanced accuracy (with timeout)
+     // Get G-AIRMET turbulence advisories for enhanced accuracy
      let gairmetAdvisories = null;
      let allGairmets = null;
      
@@ -592,7 +592,7 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       arrAirport.lat, arrAirport.lng
     );
     
-    // Get AI-enhanced analysis from OpenAI (with timeout fallback)
+    // Get AI-enhanced analysis from OpenAI 
     const routeInfo = { departure, arrival, coordinates: waypoints };
     let aiAnalysis = null;
     try {
