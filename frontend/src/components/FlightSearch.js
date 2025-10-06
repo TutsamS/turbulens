@@ -11,7 +11,10 @@ function FlightSearch({ onSearch, isOpen, onClose }) {
   const today = new Date();
   
   const formatDateForInput = (date) => {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const todayFormatted = formatDateForInput(today);
@@ -64,7 +67,7 @@ function FlightSearch({ onSearch, isOpen, onClose }) {
     <div className="popup-overlay" onClick={handleOverlayClick}>
       <div className={`popup-modal ${isVisible ? 'popup-visible' : ''}`}>
         <div className="popup-header">
-          <h2>✈️ Flight Route Analysis</h2>
+          <h2>Flight Route Analysis</h2>
           <button 
             className="popup-close" 
             onClick={handleClose}
@@ -77,7 +80,7 @@ function FlightSearch({ onSearch, isOpen, onClose }) {
         
         <div className="popup-content">
           <p className="subtitle">
-            Enter your departure and arrival airports to get AI-powered turbulence predictions
+            Enter the IATA codes for your departure and arrival airports to get your AI turbulence prediction!
           </p>
           
           <form onSubmit={handleSubmit} className="search-form" 
@@ -151,18 +154,12 @@ function FlightSearch({ onSearch, isOpen, onClose }) {
               />
               <div className="date-help">
                 <p className="date-note">
-                  📅 <strong>Best Prediction Window:</strong> Day of your flight
+                  <strong>Why is the date locked?</strong>
                 </p>
                 <p className="date-explanation">
-                  For the most accurate turbulence predictions, use this system on the day of your flight, 
-                  ideally a few hours before departure. Weather data is most reliable for current conditions.
+                  We lock the date assuming the application is used on the same day of your flight, 
+                  as weather data is current and therefore more reliable for turbulence predictions.
                 </p>
-                <div className="date-range">
-                  <span className="date-range-label">Available date:</span>
-                  <span className="date-range-value">
-                    {new Date(todayFormatted).toLocaleDateString()}
-                  </span>
-                </div>
               </div>
             </div>
             
