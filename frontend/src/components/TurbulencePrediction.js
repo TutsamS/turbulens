@@ -297,7 +297,7 @@ function TurbulencePrediction({ data }) {
                </summary>
                <div className="explanation-content">
                  <p>
-                   <strong>G-AIRMETs (Graphical AIRMETs)</strong> are official aviation weather advisories that identify potentially hazardous weather conditions for aircraft.
+                   <strong>G-AIRMETs (Graphical AIRMETs)</strong> are official aviation weather advisories that identify potentially hazardous weather conditions for aircraft. These advisories are updated every 6 hours and give pilots advanced warning to plan safe, comfortable routes. They are only available in the United States. 
                  </p>
                  <div className="gairmet-types">
                    <div className="type-item">

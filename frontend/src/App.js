@@ -22,13 +22,19 @@ function App() {
       console.log('🚀 Sending API request to:', '/api/turbulence/predict');
       console.log('📤 Request data:', flightData);
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+      
       const response = await fetch('/api/turbulence/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(flightData),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       console.log('📥 Response status:', response.status);
       console.log('📥 Response ok:', response.ok);
@@ -43,7 +49,11 @@ function App() {
       console.log('✅ API response data:', data);
       setPredictionData(data);
     } catch (err) {
-      console.log('❌ API call failed, using mock data:', err.message);
+      if (err.name === 'AbortError') {
+        console.log('⏰ API request timed out after 45 seconds, using mock data');
+      } else {
+        console.log('❌ API call failed, using mock data:', err.message);
+      }
       // For demo purposes, create mock data with proper structure
       const mockData = {
         turbulenceLevel: 'Moderate',
@@ -159,12 +169,6 @@ function App() {
                 <button className="btn btn-large" onClick={openSearch}>
                 Start Flight Analysis
                 </button>
-                
-                <div className="mission-statement">
-                  <p>
-                    <em>"Empowering nervous flyers with free, reliable information to make every flight a smoother experience."</em>
-                  </p>
-                </div>
               </div>
             </div>
           )}
