@@ -12,22 +12,14 @@ class GAirmetService {
   static async fetchGAirmets(region = 'all', hours = 6) {
     console.log(`🌪️ Fetching G-AIRMET data for region: ${region}, hours: ${hours}`);
     
-    // Try multiple endpoints using the updated 2024 API structure
+    // Try fewer endpoints with faster timeouts to avoid blocking route analysis
     const endpoints = [
       {
         url: `${this.BASE_URLS.aviationWeatherAPI}/gairmet`,
         params: { format: 'json', hours: hours }
       },
       {
-        url: `${this.BASE_URLS.aviationWeatherAPI}/gairmet`,
-        params: { format: 'xml', hours: hours }
-      },
-      {
         url: `${this.BASE_URLS.aviationWeatherData}/gairmet`,
-        params: { format: 'json', hours: hours }
-      },
-      {
-        url: `${this.BASE_URLS.aviationWeatherAlt}/gairmet`,
         params: { format: 'json', hours: hours }
       }
     ];
@@ -38,7 +30,7 @@ class GAirmetService {
         
         const response = await axios.get(endpoints[i].url, { 
           params: endpoints[i].params, 
-          timeout: 15000,
+          timeout: 5000, // Reduced from 15 seconds to 5 seconds
           headers: {
             'User-Agent': 'Turbulens-App/1.0 (Educational Project)'
           }
@@ -60,12 +52,10 @@ class GAirmetService {
       } catch (error) {
         console.log(`⚠️ Endpoint ${i + 1} failed: ${error.message}`);
         
-        // If this is the last endpoint, return null (no data available)
-        if (i === endpoints.length - 1) {
-          console.log(`⚠️ All G-AIRMET endpoints failed. Last error: ${error.message}`);
-          console.log('ℹ️ No G-AIRMET data available - this is normal when no advisories are active');
-          return null;
-        }
+        // Exit early after first failure to avoid blocking route analysis
+        console.log(`⚠️ G-AIRMET endpoints failing, skipping to avoid delays`);
+        console.log('ℹ️ No G-AIRMET data available - this is normal when no advisories are active');
+        return null;
       }
     }
     
