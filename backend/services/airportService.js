@@ -52,7 +52,7 @@ class AirportService {
       if (!this.airportsData || Date.now() - this.lastFetch > this.dataFetchTimeout) {
         console.log('📡 Fetching airports data from OurAirports...');
         const url = 'https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat';
-        const response = await axios.get(url);
+        const response = await axios.get(url, { timeout: 10000 }); // 10 second timeout
         this.airportsData = response.data.split('\n').map(line => {
           const fields = line.split(',').map(field => field.replace(/"/g, ''));
           return {

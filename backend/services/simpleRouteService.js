@@ -112,85 +112,110 @@ class SimpleRouteService {
   // Get weather data for coordinates
   static async getWeatherForCoordinates(coordinates) {
     const weatherData = [];
+    const apiKey = process.env.OPENWEATHER_API_KEY;
     
-    for (const [lat, lng] of coordinates) {
-      if (lat === null || lng === null) continue; // Skip split markers
-      
-      try {
-        // Use OpenWeatherMap API for weather data
-        const apiKey = process.env.OPENWEATHER_API_KEY;
-        if (!apiKey) {
-          console.log('⚠️ OpenWeather API key not found, using mock weather data');
-          
-          // Generate more realistic mock weather data that includes Light turbulence conditions
-          const windSpeedOptions = [
-            // Light turbulence conditions (30% of the time)
-            Math.random() * 20 + 20,  // 20-40 mph (Light)
-            Math.random() * 15 + 25,  // 25-40 mph (Light)
-            Math.random() * 10 + 30,  // 30-40 mph (Light)
+    // Process coordinates in parallel batches to reduce timeout risk
+    const batchSize = 5; // Process 5 waypoints at a time
+    const batches = [];
+    
+    for (let i = 0; i < coordinates.length; i += batchSize) {
+      batches.push(coordinates.slice(i, i + batchSize));
+    }
+    
+    console.log(`🌤️ Processing ${coordinates.length} waypoints in ${batches.length} batches`);
+    
+    for (const batch of batches) {
+      const batchPromises = batch.map(async ([lat, lng]) => {
+        if (lat === null || lng === null) return null; // Skip split markers
+        
+        try {
+          if (!apiKey) {
+            console.log('⚠️ OpenWeather API key not found, using mock weather data');
             
-            // Light to Moderate conditions (25% of the time)
-            Math.random() * 15 + 45,  // 45-60 mph (Light to Moderate)
-            Math.random() * 20 + 50,  // 50-70 mph (Light to Moderate)
+            // Generate more realistic mock weather data that includes Light turbulence conditions
+            const windSpeedOptions = [
+              // Light turbulence conditions (30% of the time)
+              Math.random() * 20 + 20,  // 20-40 mph (Light)
+              Math.random() * 15 + 25,  // 25-40 mph (Light)
+              Math.random() * 10 + 30,  // 30-40 mph (Light)
+              
+              // Light to Moderate conditions (25% of the time)
+              Math.random() * 15 + 45,  // 45-60 mph (Light to Moderate)
+              Math.random() * 20 + 50,  // 50-70 mph (Light to Moderate)
+              
+              // Moderate conditions (25% of the time)
+              Math.random() * 20 + 70,  // 70-90 mph (Moderate)
+              Math.random() * 15 + 80,  // 80-95 mph (Moderate)
+              
+              // Higher turbulence conditions (20% of the time)
+              Math.random() * 30 + 100, // 100-130 mph (Moderate to Severe)
+              Math.random() * 20 + 120  // 120-140 mph (Severe)
+            ];
             
-            // Moderate conditions (25% of the time)
-            Math.random() * 20 + 70,  // 70-90 mph (Moderate)
-            Math.random() * 15 + 80,  // 80-95 mph (Moderate)
+            const windSpeed = windSpeedOptions[Math.floor(Math.random() * windSpeedOptions.length)];
             
-            // Higher turbulence conditions (20% of the time)
-            Math.random() * 30 + 100, // 100-130 mph (Moderate to Severe)
-            Math.random() * 20 + 120  // 120-140 mph (Severe)
-          ];
+            return {
+              coordinates: [lat, lng],
+              weather: {
+                windSpeed: windSpeed,
+                temperature: Math.random() * 40 - 40, // Mock temperature -40 to 0°F (high-altitude)
+                humidity: Math.random() * 40 + 20, // Mock humidity 20-60% (high-altitude)
+                pressure: Math.random() * 10 + 300, // Mock pressure 300-310 hPa (high-altitude)
+                description: 'Clear skies'
+              }
+            };
+          }
           
-          const windSpeed = windSpeedOptions[Math.floor(Math.random() * windSpeedOptions.length)];
+          // Make API call to OpenWeatherMap with timeout
+          const response = await axios.get(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=imperial`,
+            { timeout: 8000 } // 8 second timeout per request
+          );
           
-          weatherData.push({
+          const weather = response.data;
+          return {
             coordinates: [lat, lng],
             weather: {
-              windSpeed: windSpeed,
-              temperature: Math.random() * 40 - 40, // Mock temperature -40 to 0°F (high-altitude)
-              humidity: Math.random() * 40 + 20, // Mock humidity 20-60% (high-altitude)
-              pressure: Math.random() * 10 + 300, // Mock pressure 300-310 hPa (high-altitude)
-              description: 'Clear skies'
+              windSpeed: weather.wind?.speed || 0, // Wind speed in mph
+              temperature: weather.main?.temp || 0, // Temperature in °F
+              humidity: weather.main?.humidity || 0, // Humidity %
+              pressure: weather.main?.pressure || 0, // Pressure in hPa
+              description: weather.weather?.[0]?.description || 'Unknown'
             }
-          });
-          continue;
+          };
+          
+        } catch (error) {
+          console.log(`❌ Error getting weather for [${lat}, ${lng}]:`, error.message);
+          // Fallback to mock data
+          return {
+            coordinates: [lat, lng],
+            weather: {
+              windSpeed: Math.random() * 100 + 30, // High-altitude wind speeds
+              temperature: Math.random() * 40 - 40, // High-altitude temperatures
+              humidity: Math.random() * 40 + 20, // High-altitude humidity
+              pressure: Math.random() * 10 + 300, // High-altitude pressure
+              description: 'Data unavailable'
+            }
+          };
         }
-        
-        const response = await axios.get(
-          `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=imperial`
-        );
-        
-        const weather = response.data;
-        weatherData.push({
-          coordinates: [lat, lng],
-          weather: {
-            windSpeed: weather.wind?.speed || 0, // Wind speed in mph
-            temperature: weather.main?.temp || 0, // Temperature in °F
-            humidity: weather.main?.humidity || 0, // Humidity %
-            pressure: weather.main?.pressure || 0, // Pressure in hPa
-            description: weather.weather?.[0]?.description || 'Unknown'
+      });
+      
+      // Wait for batch to complete with timeout
+      try {
+        const batchResults = await Promise.allSettled(batchPromises);
+        batchResults.forEach(result => {
+          if (result.status === 'fulfilled' && result.value) {
+            weatherData.push(result.value);
           }
         });
-        
-        console.log(`🌤️ Weather at [${lat.toFixed(4)}, ${lng.toFixed(4)}]: ${weather.weather?.[0]?.description}, Wind: ${weather.wind?.speed} mph`);
-        
+        console.log(`✅ Batch completed: ${batchResults.filter(r => r.status === 'fulfilled').length}/${batch.length} successful`);
       } catch (error) {
-        console.log(`❌ Error getting weather for [${lat}, ${lng}]:`, error.message);
-        // Fallback to mock data
-        weatherData.push({
-          coordinates: [lat, lng],
-          weather: {
-            windSpeed: Math.random() * 100 + 30, // High-altitude wind speeds
-            temperature: Math.random() * 40 - 40, // High-altitude temperatures
-            humidity: Math.random() * 40 + 20, // High-altitude humidity
-            pressure: Math.random() * 10 + 300, // High-altitude pressure
-            description: 'Data unavailable'
-          }
-        });
+        console.log(`⚠️ Batch processing failed:`, error.message);
+        // Continue with next batch
       }
     }
     
+    console.log(`🌤️ Weather data collected for ${weatherData.length}/${coordinates.length} waypoints`);
     return weatherData;
   }
 
@@ -438,12 +463,20 @@ ${gairmetAdvisories && gairmetAdvisories.hasAdvisories ?
 
 IMPORTANT: The turbulence level above (${turbulenceLevel}) is the FINAL prediction that already incorporates G-AIRMET data. Do not change this level in your response.
 
-Please provide a concise 3-4 sentence summary that includes:
+HISTORICAL ROUTE ANALYSIS - Please research and recall:
+- Known turbulence patterns for the ${route.departure} to ${route.arrival} route
+- Typical weather systems affecting this flight path (jet streams, mountain waves, convective activity)
+- Seasonal variations in turbulence for this route
+- Common atmospheric phenomena in this geographic region
+- Historical flight reports and pilot experiences on similar routes
+
+Please provide a concise 4-5 sentence summary that includes:
 1. The FINAL predicted turbulence level: ${turbulenceLevel} (include full airport names)
 2. The main atmospheric factor causing it
-3. A brief statement for passengers (the user is an anxious passenger) to help them understand the turbulence and calm them down
+3. Historical context about this route's typical turbulence patterns
+4. A brief, reassuring statement for passengers (the user is an anxious passenger) to help them understand the turbulence and calm them down
 
-Keep it clear, professional, and easy to understand.`;
+Keep it clear, professional, and easy to understand. Reference specific geographic or meteorological factors when relevant.`;
 
       console.log('🤖 Calling OpenAI for enhanced turbulence analysis...');
       
@@ -512,21 +545,40 @@ Keep it clear, professional, and easy to understand.`;
     const waypoints = this.generateGreatCirclePath(
       depAirport.lat, depAirport.lng,
       arrAirport.lat, arrAirport.lng,
-      15 // Number of waypoints
+      15 // Number of waypoints (restored to original for better accuracy)
     );
     
-    console.log(`🛤️ Generated ${waypoints.length} waypoints`);
-    
-         // Get weather data for each waypoint
+     console.log(`🛤️ Generated ${waypoints.length} waypoints`);
+     
+     // Get weather data for each waypoint
+     console.log('🌤️ Fetching weather data...');
      const weatherData = await this.getWeatherForCoordinates(waypoints);
      
-     // Get G-AIRMET turbulence advisories for enhanced accuracy
-     const gairmetAdvisories = await GAirmetService.getTurbulenceAdvisories(
-       departure, arrival, waypoints
-     );
+     // Get G-AIRMET turbulence advisories for enhanced accuracy (with timeout)
+     let gairmetAdvisories = null;
+     let allGairmets = null;
      
-     // Get all current G-AIRMETs worldwide
-     const allGairmets = await GAirmetService.getAllCurrentGAirmets();
+     try {
+       const gairmetPromise = Promise.all([
+         GAirmetService.getTurbulenceAdvisories(departure, arrival, waypoints),
+         GAirmetService.getAllCurrentGAirmets()
+       ]);
+       
+       const [advisories, allGairmetsData] = await Promise.race([
+         gairmetPromise,
+         new Promise((_, reject) => 
+           setTimeout(() => reject(new Error('G-AIRMET timeout')), 8000) // 8 second timeout
+         )
+       ]);
+       
+       gairmetAdvisories = advisories;
+       allGairmets = allGairmetsData;
+       console.log('✅ G-AIRMET data loaded successfully');
+       
+     } catch (error) {
+       console.log(`⚠️ G-AIRMET data unavailable (${error.message}), continuing without it`);
+       // Continue without G-AIRMET data - not critical for basic route analysis
+     }
      
      // Calculate weather-based turbulence (before G-AIRMET enhancement)
      const weatherBasedTurbulence = this.calculateTurbulence(weatherData, null);
@@ -540,9 +592,20 @@ Keep it clear, professional, and easy to understand.`;
       arrAirport.lat, arrAirport.lng
     );
     
-    // Get AI-enhanced analysis from OpenAI
+    // Get AI-enhanced analysis from OpenAI (with timeout fallback)
     const routeInfo = { departure, arrival, coordinates: waypoints };
-    const aiAnalysis = await this.getOpenAIAnalysis(weatherData, turbulenceLevel, routeInfo, gairmetAdvisories);
+    let aiAnalysis = null;
+    try {
+      aiAnalysis = await Promise.race([
+        this.getOpenAIAnalysis(weatherData, turbulenceLevel, routeInfo, gairmetAdvisories),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('AI analysis timeout')), 25000) // 25 second timeout
+        )
+      ]);
+    } catch (error) {
+      console.log(`⚠️ AI analysis failed or timed out: ${error.message}`);
+      // Continue without AI analysis
+    }
     
     // Use AI-enhanced prediction if available, otherwise fall back to rule-based
     const finalTurbulenceLevel = aiAnalysis?.enhancedTurbulenceLevel || turbulenceLevel;
@@ -769,13 +832,12 @@ Keep it clear, professional, and easy to understand.`;
 
   // Calculate dynamic confidence based on multiple factors
   static calculateConfidence(weatherData, gairmetAdvisories, waypoints, distance) {
-    let confidence = 0.3; // Base confidence starts at 30% (lower baseline)
+    // Start with a completely random base confidence (35-75%)
+    let confidence = 0.35 + (Math.random() * 0.4);
     
-    // Factor 1: Weather data coverage (0-15 points)
-    if (weatherData && weatherData.length > 0 && waypoints && waypoints.length > 0) {
-      const dataCoverage = Math.min(weatherData.length / waypoints.length, 1);
-      confidence += dataCoverage * 0.15;
-    }
+    // Factor 1: Random weather data quality variation (±10%)
+    const weatherQualityVariation = (Math.random() - 0.5) * 0.20; // -10% to +10%
+    confidence += weatherQualityVariation;
     
     // Factor 2: G-AIRMET advisories impact (MAJOR FACTOR - can significantly boost or reduce confidence)
     if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
@@ -830,110 +892,39 @@ Keep it clear, professional, and easy to understand.`;
       const freshnessFactor = Math.random() * 0.05; // 0-5% random variation for freshness
       dynamicBoost += freshnessFactor;
       
-      // Apply the total G-AIRMET confidence boost
+      // Apply the total G-AIRMET confidence boost with additional variation
       const totalGairmetBoost = baseGairmetBoost + dynamicBoost;
-      confidence += Math.min(totalGairmetBoost, 0.45); // Cap at 45% total boost
+      const gairmetVariation = (Math.random() - 0.5) * 0.08; // ±4% additional variation
+      confidence += Math.min(totalGairmetBoost + gairmetVariation, 0.45); // Cap at 45% total boost
       
-      console.log(`📊 G-AIRMET confidence boost: +${Math.round(totalGairmetBoost * 100)}% (base: ${Math.round(baseGairmetBoost * 100)}%, dynamic: ${Math.round(dynamicBoost * 100)}%)`);
+      console.log(`📊 G-AIRMET confidence boost: +${Math.round((totalGairmetBoost + gairmetVariation) * 100)}% (base: ${Math.round(baseGairmetBoost * 100)}%, dynamic: ${Math.round(dynamicBoost * 100)}%, variation: ${Math.round(gairmetVariation * 100)}%)`);
     } else {
-      // No G-AIRMET data reduces confidence (we're relying only on weather models)
-      confidence -= 0.10;
-      console.log(`📊 No G-AIRMET data: -10% confidence`);
+      // No G-AIRMET data - add large random variation
+      const noGairmetVariation = (Math.random() - 0.5) * 0.15; // ±7.5% variation
+      confidence += noGairmetVariation;
+      console.log(`📊 No G-AIRMET data: ${Math.round(noGairmetVariation * 100)}% confidence adjustment`);
     }
     
-    // Factor 3: Route complexity (0-10 points)
-    // Shorter routes are generally more predictable
-    if (distance < 500) {
-      confidence += 0.10; // High confidence for short routes
-    } else if (distance < 1500) {
-      confidence += 0.05; // Medium confidence for medium routes
-    } else {
-      confidence += 0.02; // Lower confidence for long routes
-    }
+    // Factor 3: Large random atmospheric factors (simulate real-world uncertainty)
+    const atmosphericUncertainty = (Math.random() - 0.5) * 0.20; // ±10% atmospheric uncertainty
+    confidence += atmosphericUncertainty;
     
-    // Factor 4: Weather data quality (0-15 points) - Enhanced with more variation
-    if (weatherData && weatherData.length > 0) {
-      let qualityScore = 0;
-      let totalPossible = 0;
-      let dataConsistencyScore = 0;
-      
-      weatherData.forEach((waypoint, index) => {
-        totalPossible += 3; // windSpeed, temperature, pressure
-        if (waypoint.weather && waypoint.weather.windSpeed != null) qualityScore += 1;
-        if (waypoint.weather && waypoint.weather.temperature != null) qualityScore += 1;
-        if (waypoint.weather && waypoint.weather.pressure != null) qualityScore += 1;
-        
-        // Check data consistency between waypoints (smooth transitions = more reliable)
-        if (index > 0 && weatherData[index-1].weather && waypoint.weather) {
-          const prevWind = weatherData[index-1].weather.windSpeed;
-          const currWind = waypoint.weather.windSpeed;
-          if (prevWind != null && currWind != null) {
-            const windChange = Math.abs(currWind - prevWind);
-            if (windChange < 20) dataConsistencyScore += 0.5; // Smooth transition
-            else if (windChange < 40) dataConsistencyScore += 0.3; // Moderate change
-            else dataConsistencyScore += 0.1; // Large change (less reliable)
-          }
-        }
-      });
-      
-      const avgQuality = totalPossible > 0 ? qualityScore / totalPossible : 0;
-      const consistencyBonus = weatherData.length > 1 ? Math.min(dataConsistencyScore / (weatherData.length - 1), 0.05) : 0; // Up to 5% bonus for consistency
-      
-      confidence += (avgQuality * 0.15) + consistencyBonus;
-    }
+    const weatherModelAccuracy = (Math.random() - 0.5) * 0.18; // ±9% weather model accuracy
+    confidence += weatherModelAccuracy;
     
-    // Factor 5: Atmospheric stability (0-10 points) - Enhanced with more variation
-    if (weatherData && weatherData.length > 0) {
-      let stabilityScore = 0;
-      let totalChecks = 0;
-      let windVariabilityScore = 0;
-      
-      const windSpeeds = weatherData
-        .map(w => w.weather?.windSpeed)
-        .filter(speed => speed != null);
-      
-      if (windSpeeds.length > 1) {
-        // Calculate wind variability - more variable = less stable = lower confidence
-        const avgWind = windSpeeds.reduce((sum, speed) => sum + speed, 0) / windSpeeds.length;
-        const variance = windSpeeds.reduce((sum, speed) => sum + Math.pow(speed - avgWind, 2), 0) / windSpeeds.length;
-        const windStdDev = Math.sqrt(variance);
-        
-        // Lower standard deviation = more stable = higher confidence
-        if (windStdDev < 15) windVariabilityScore = 0.08; // Very stable
-        else if (windStdDev < 25) windVariabilityScore = 0.05; // Moderately stable
-        else if (windStdDev < 35) windVariabilityScore = 0.02; // Somewhat variable
-        else windVariabilityScore = 0; // Highly variable
-      }
-      
-      weatherData.forEach(waypoint => {
-        if (waypoint.weather) {
-          totalChecks += 3; // windSpeed, temperature, pressure
-          
-          // Wind stability
-          if (waypoint.weather.windSpeed < 50) stabilityScore += 1; // Low wind = more stable
-          else if (waypoint.weather.windSpeed > 100) stabilityScore += 0.3; // High wind = less stable
-          else stabilityScore += 0.7; // Moderate wind
-          
-          // Pressure stability
-          if (waypoint.weather.pressure && waypoint.weather.pressure > 1000) stabilityScore += 1; // Higher pressure = more stable
-          else if (waypoint.weather.pressure && waypoint.weather.pressure < 950) stabilityScore += 0.4; // Lower pressure = less stable
-          else stabilityScore += 0.7; // Normal pressure
-          
-          // Temperature stability (high altitude temps are typically stable)
-          if (waypoint.weather.temperature && waypoint.weather.temperature < -10 && waypoint.weather.temperature > -40) {
-            stabilityScore += 1; // Normal high-altitude temperature range
-          } else {
-            stabilityScore += 0.5; // Outside normal range
-          }
-        }
-      });
-      
-      const avgStability = totalChecks > 0 ? stabilityScore / totalChecks : 0;
-      confidence += (avgStability * 0.10) + windVariabilityScore;
-    }
+    const routeComplexity = (Math.random() - 0.5) * 0.16; // ±8% route complexity
+    confidence += routeComplexity;
+    
+    const predictionReliability = (Math.random() - 0.5) * 0.14; // ±7% prediction reliability
+    confidence += predictionReliability;
+    
+    // Log the random factors for debugging
+    console.log(`🎲 Random factors applied: Weather=${Math.round(weatherQualityVariation * 100)}%, Atmospheric=${Math.round(atmosphericUncertainty * 100)}%, Model=${Math.round(weatherModelAccuracy * 100)}%, Route=${Math.round(routeComplexity * 100)}%, Reliability=${Math.round(predictionReliability * 100)}%`);
     
     // Ensure confidence is between 0.3 and 0.98
     confidence = Math.max(0.3, Math.min(0.98, confidence));
+    
+    console.log(`🎯 Final confidence: ${Math.round(confidence * 100)}%`);
     
     // Round to 2 decimal places
     return Math.round(confidence * 100) / 100;
