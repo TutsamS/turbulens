@@ -317,9 +317,6 @@ function TurbulencePrediction({ data }) {
                      <span><strong>Wind Shear</strong> - Sudden wind changes</span>
                    </div>
                  </div>
-                 <p>
-                   These advisories are updated every 6 hours and give pilots advanced warning to plan safe, comfortable routes.
-                 </p>
                  
                  <div className="official-link">
                    <p>
