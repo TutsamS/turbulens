@@ -36,7 +36,7 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
 
   // Check if weather layer API key is available
   useEffect(() => {
-    const apiKey = '38c84f3958c16d4c64ac0936426d9230';
+    const apiKey = 'your_openweather_api_key_here';
     const isValid = apiKey && apiKey !== 'your_openweather_api_key_here' && apiKey !== 'demo';
     setWeatherLayerAvailable(isValid);
   }, []);
@@ -285,7 +285,7 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
         {/* Weather layer overlay - only show if API key is available */}
         {weatherLayerAvailable && (
           <TileLayer
-            url={`https://tile.openweathermap.org/map/${weatherLayer}/{z}/{x}/{y}.png?appid=38c84f3958c16d4c64ac0936426d9230`}
+            url={`https://tile.openweathermap.org/map/${weatherLayer}/{z}/{x}/{y}.png?appid=your_openweather_api_key_here`}
             attribution='&copy; <a href="https://openweathermap.org/">OpenWeatherMap</a>'
             opacity={0.8}
             zIndex={1000}
