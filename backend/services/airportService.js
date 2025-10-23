@@ -32,7 +32,7 @@ class AirportService {
         return airportInfo;
       }
     } catch (error) {
-      console.log(`OurAirports failed for ${airportCode}:`, error.message);
+      // OurAirports failed, continue to fallback
     }
 
     // 2. Fallback to hardcoded common airports
@@ -50,7 +50,6 @@ class AirportService {
     try {
       // Fetch and cache the airports data if not already loaded
       if (!this.airportsData || Date.now() - this.lastFetch > this.dataFetchTimeout) {
-        console.log('📡 Fetching airports data from OurAirports...');
         const url = 'https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat';
         const response = await axios.get(url, { timeout: 10000 }); // 10 second timeout
         this.airportsData = response.data.split('\n').map(line => {
@@ -73,7 +72,6 @@ class AirportService {
           };
         });
         this.lastFetch = Date.now();
-        console.log(`✅ Loaded ${this.airportsData.length} airports from OurAirports`);
       }
 
       // Find the airport by IATA code
@@ -240,7 +238,7 @@ class AirportService {
         return formattedInfo;
       }
     } catch (error) {
-      console.log(`OurAirports failed for ${airportCode}:`, error.message);
+      // OurAirports failed, continue to fallback
     }
 
     // 2. Fallback to hardcoded common airports

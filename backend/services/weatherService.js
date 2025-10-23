@@ -8,7 +8,7 @@ class WeatherService {
     this.noaaWeatherUrl = 'https://api.weather.gov/';
     
     if (!this.openWeatherApiKey) {
-      console.warn('⚠️  OpenWeather API key not found in environment variables');
+      console.warn('OpenWeather API key not found in environment variables');
     }
   }
 
@@ -26,9 +26,6 @@ class WeatherService {
         url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(location)}&appid=${this.openWeatherApiKey}&units=metric`;
       }
 
-      console.log(`🌤️  Fetching weather from: ${url.replace(this.openWeatherApiKey, 'API_KEY_HIDDEN')}`);
-      console.log(`🔑 API Key available: ${this.openWeatherApiKey ? 'Yes' : 'No'}`);
-      console.log(`📍 Location type: ${typeof location}, Location value:`, location);
       const response = await axios.get(url);
       
       // Transform the data to our standard format
@@ -52,20 +49,7 @@ class WeatherService {
         console.error('Response data:', error.response.data);
       }
       
-      // Return mock data as fallback
-      return {
-        location: typeof location === 'string' ? location : 'Unknown',
-        temperature: 15 + Math.random() * 20,
-        humidity: 40 + Math.random() * 40,
-        windSpeed: 5 + Math.random() * 25,
-        windDirection: Math.floor(Math.random() * 360),
-        pressure: 1000 + Math.random() * 50,
-        conditions: ['Clear', 'Cloudy', 'Rain', 'Storm'][Math.floor(Math.random() * 4)],
-        description: 'Mock data - API unavailable',
-        visibility: 5 + Math.random() * 10,
-        timestamp: new Date().toISOString(),
-        isMock: true
-      };
+      throw new Error(`Failed to fetch weather data: ${error.message}`);
     }
   }
 
@@ -152,14 +136,7 @@ class WeatherService {
       };
     } catch (error) {
       console.error('Error fetching wind data:', error.message);
-      return {
-        windSpeed: 10 + Math.random() * 15,
-        windDirection: Math.floor(Math.random() * 360),
-        windGust: 15 + Math.random() * 20,
-        turbulenceIndex: 0.3 + Math.random() * 0.4,
-        timestamp: new Date().toISOString(),
-        isMock: true
-      };
+      throw new Error(`Failed to fetch wind data: ${error.message}`);
     }
   }
 
@@ -194,22 +171,8 @@ class WeatherService {
       });
       return response.data;
     } catch (error) {
-      console.log('NOAA jet stream data unavailable, using mock data');
-      
-      // Return mock jet stream data
-      return {
-        jetStreams: [
-          {
-            name: 'Polar Jet Stream',
-            altitude: 30000,
-            speed: 150 + Math.random() * 100,
-            latitude: 40 + Math.random() * 20,
-            longitude: -100 + Math.random() * 60
-          }
-        ],
-        timestamp: new Date().toISOString(),
-        isMock: true
-      };
+      console.log('NOAA jet stream data unavailable');
+      throw new Error(`Failed to fetch jet stream data: ${error.message}`);
     }
   }
 
@@ -222,13 +185,8 @@ class WeatherService {
       );
       return response.data;
     } catch (error) {
-      console.log('Aviation weather data unavailable, using mock data');
-      return {
-        taf: 'Mock TAF data - API unavailable',
-        metar: 'Mock METAR data - API unavailable',
-        timestamp: new Date().toISOString(),
-        isMock: true
-      };
+      console.log('Aviation weather data unavailable');
+      throw new Error(`Failed to fetch aviation weather data: ${error.message}`);
     }
   }
 }

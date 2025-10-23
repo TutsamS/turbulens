@@ -18,12 +18,8 @@ function App() {
     setError(null);
     
     try {
-      // This will be replaced with actual API call
-      console.log('🚀 Sending API request to:', '/api/turbulence/predict');
-      console.log('📤 Request data:', flightData);
-      
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
       
       const response = await fetch('/api/turbulence/predict', {
         method: 'POST',
@@ -36,67 +32,16 @@ function App() {
       
       clearTimeout(timeoutId);
 
-      console.log('📥 Response status:', response.status);
-      console.log('📥 Response ok:', response.ok);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.log('❌ Error response body:', errorText);
         throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('✅ API response data:', data);
       setPredictionData(data);
     } catch (err) {
-      if (err.name === 'AbortError') {
-        console.log('⏰ API request timed out after 45 seconds, using mock data');
-      } else {
-        console.log('❌ API call failed, using mock data:', err.message);
-      }
-      // For demo purposes, create mock data with proper structure
-      const mockData = {
-        turbulenceLevel: 'Moderate',
-        confidence: 0.75,
-        factors: [
-          'Wind shear detected at 30,000ft',
-          'Jet stream activity in route',
-          'Convective weather patterns'
-        ],
-        route: {
-          departure: flightData.departure,
-          arrival: flightData.arrival,
-          coordinates: [
-            [40.7128, -74.0060], // NYC
-            [34.0522, -118.2437]  // LAX
-          ]
-        },
-        recommendations: [
-          {
-            icon: '🛡️',
-            type: 'Safety',
-            text: 'Keep seatbelt fastened throughout the flight'
-          },
-          {
-            icon: '📅',
-            type: 'Updates',
-            text: 'Check for real-time weather updates'
-          },
-          {
-            icon: '⏰',
-            type: 'Timing',
-            text: 'Consider alternative departure times if possible'
-          }
-        ]
-      };
-
-      setPredictionData(mockData);
-      // Don't set error for demo purposes - just log it
-      console.log('Using mock prediction data for:', flightData.departure, '→', flightData.arrival);
+      setError(err.message);
     } finally {
-      // Add a delay to let users enjoy the airplane animation
-      // The airplane animation cycle is 3 seconds, so we'll add 2.5 seconds to ensure at least 2 full cycles
-      await new Promise(resolve => setTimeout(resolve, 2500));
       setLoading(false);
     }
   };

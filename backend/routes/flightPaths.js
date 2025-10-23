@@ -99,7 +99,7 @@ router.get('/route/:departure/:arrival', async (req, res) => {
       });
     }
 
-    console.log(`🛫 API Request: ${departure} → ${arrival}`);
+    console.log(`API Request: ${departure} to ${arrival}`);
     
     const route = await FlightPathService.getRouteByAirports(departure.toUpperCase(), arrival.toUpperCase());
     
@@ -117,7 +117,7 @@ router.get('/route/:departure/:arrival', async (req, res) => {
     });
   } catch (error) {
     const { departure, arrival } = req.params;
-    console.error(`❌ Error generating route ${departure} → ${arrival}:`, error);
+    console.error(`Error generating route ${departure} to ${arrival}:`, error);
     res.status(500).json({
       success: false,
       error: `Failed to generate route: ${error.message}`

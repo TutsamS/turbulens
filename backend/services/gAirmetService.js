@@ -10,8 +10,6 @@ class GAirmetService {
 
   // Fetch G-AIRMET data for a specific region and time
   static async fetchGAirmets(region = 'all', hours = 6) {
-    console.log(`🌪️ Fetching G-AIRMET data for region: ${region}, hours: ${hours}`);
-    
     // Try fewer endpoints with faster timeouts to avoid blocking route analysis
     const endpoints = [
       {
@@ -26,8 +24,6 @@ class GAirmetService {
 
     for (let i = 0; i < endpoints.length; i++) {
       try {
-        console.log(`🔄 Trying endpoint ${i + 1}/${endpoints.length}: ${endpoints[i].url}`);
-        
         const response = await axios.get(endpoints[i].url, { 
           params: endpoints[i].params, 
           timeout: 5000, // Reduced from 15 seconds to 5 seconds
@@ -37,24 +33,16 @@ class GAirmetService {
         });
         
         if (response.status === 200 && response.data) {
-          console.log(`✅ G-AIRMET data fetched successfully from endpoint ${i + 1}`);
-          
           // Handle both JSON and XML responses
           if (typeof response.data === 'object') {
-            console.log('📄 Parsing JSON G-AIRMET data');
             return this.parseGAirmetJsonData(response.data);
           } else {
-            console.log('📄 Parsing XML G-AIRMET data');
             return this.parseGAirmetData(response.data);
           }
         }
         
       } catch (error) {
-        console.log(`⚠️ Endpoint ${i + 1} failed: ${error.message}`);
-        
         // Exit early after first failure to avoid blocking route analysis
-        console.log(`⚠️ G-AIRMET endpoints failing, skipping to avoid delays`);
-        console.log('ℹ️ No G-AIRMET data available - this is normal when no advisories are active');
         return null;
       }
     }
@@ -65,8 +53,6 @@ class GAirmetService {
   // Parse JSON G-AIRMET data (new 2024 API format)
   static parseGAirmetJsonData(jsonData) {
     try {
-      console.log('📊 Parsing JSON G-AIRMET data structure');
-      
       // Handle different possible JSON structures
       let gairmets = [];
       
@@ -80,19 +66,16 @@ class GAirmetService {
         // GeoJSON format
         gairmets = jsonData.features.map(feature => this.parseGeoJsonGAirmet(feature));
       } else {
-        console.log('⚠️ Unknown JSON structure for G-AIRMET data');
         return [];
       }
 
-      console.log(`📊 Found ${gairmets.length} G-AIRMET entries in JSON data`);
-      
       // Transform JSON data to our standard format
       const transformedGairmets = gairmets.map(gairmet => this.transformJsonGAirmet(gairmet));
       
       return transformedGairmets.filter(g => g !== null);
       
     } catch (error) {
-      console.error(`❌ Error parsing JSON G-AIRMET data:`, error.message);
+      console.error(`Error parsing JSON G-AIRMET data:`, error.message);
       return [];
     }
   }
@@ -114,7 +97,7 @@ class GAirmetService {
         rawData: feature
       };
     } catch (error) {
-      console.warn(`⚠️ Error parsing GeoJSON G-AIRMET:`, error.message);
+      console.warn(`Error parsing GeoJSON G-AIRMET:`, error.message);
       return null;
     }
   }
@@ -155,7 +138,7 @@ class GAirmetService {
         rawData: gairmet
       };
     } catch (error) {
-      console.warn(`⚠️ Error transforming JSON G-AIRMET:`, error.message);
+      console.warn(`Error transforming JSON G-AIRMET:`, error.message);
       return null;
     }
   }
@@ -170,7 +153,6 @@ class GAirmetService {
       const gairmetMatches = xmlData.match(/<GAIRMET>[\s\S]*?<\/GAIRMET>/g);
       
       if (!gairmetMatches) {
-        console.log('⚠️ No G-AIRMET entries found in XML data');
         return [];
       }
 
@@ -181,16 +163,14 @@ class GAirmetService {
             gairmets.push(gairmet);
           }
         } catch (parseError) {
-          console.warn(`⚠️ Failed to parse G-AIRMET ${index + 1}:`, parseError.message);
+          console.warn(`Failed to parse G-AIRMET ${index + 1}:`, parseError.message);
         }
       });
 
-      console.log(`📊 Parsed ${gairmets.length} G-AIRMET entries`);
-      
       return gairmets;
       
     } catch (error) {
-      console.error(`❌ Error parsing G-AIRMET XML:`, error.message);
+      console.error(`Error parsing G-AIRMET XML:`, error.message);
       return [];
     }
   }
@@ -224,7 +204,7 @@ class GAirmetService {
       };
       
     } catch (error) {
-      console.warn(`⚠️ Error parsing single G-AIRMET:`, error.message);
+      console.warn(`Error parsing single G-AIRMET:`, error.message);
       return null;
     }
   }
@@ -269,7 +249,7 @@ class GAirmetService {
         return 'General area';
       }
     } catch (error) {
-      console.warn(`⚠️ Error determining area:`, error.message);
+      console.warn(`Error determining area:`, error.message);
       return 'Area not specified';
     }
   }
@@ -333,7 +313,7 @@ class GAirmetService {
       return coordinates.length > 0 ? coordinates : null;
       
     } catch (error) {
-      console.warn(`⚠️ Error extracting coordinates from points:`, error.message);
+      console.warn(`Error extracting coordinates from points:`, error.message);
       return null;
     }
   }
@@ -396,7 +376,7 @@ class GAirmetService {
       return { min: 0, max: 999999 };
       
     } catch (error) {
-      console.warn(`⚠️ Error parsing altitude:`, error.message);
+      console.warn(`Error parsing altitude:`, error.message);
       return { min: 0, max: 999999 };
     }
   }
@@ -404,21 +384,16 @@ class GAirmetService {
   // Check if a route intersects with any G-AIRMET areas
   static checkRouteIntersection(routeCoordinates, gairmets) {
     if (!routeCoordinates || !gairmets || gairmets.length === 0) {
-      console.log('📝 No route coordinates or G-AIRMETs to check');
       return { hasIntersection: false, advisories: [] };
     }
 
-    console.log(`🔍 Checking ${routeCoordinates.length} route points against ${gairmets.length} G-AIRMETs`);
     const advisories = [];
     
     gairmets.forEach((gairmet, index) => {
-      console.log(`  📋 G-AIRMET ${index + 1}: ${gairmet.hazardType} - ${gairmet.severity} in ${gairmet.area}`);
-      
       if (gairmet.hazardType === 'Turbulence' && gairmet.coordinates) {
         const intersection = this.checkPolygonIntersection(routeCoordinates, gairmet.coordinates);
         
         if (intersection) {
-          console.log(`    ✅ Route intersects with this G-AIRMET`);
           advisories.push({
             type: 'G-AIRMET',
             hazard: gairmet.hazardType,
@@ -429,15 +404,10 @@ class GAirmetService {
             confidence: 'High',
             source: 'AviationWeather.gov'
           });
-        } else {
-          console.log(`    ❌ No intersection with this G-AIRMET`);
         }
-      } else {
-        console.log(`    ⏭️ Skipping non-turbulence G-AIRMET: ${gairmet.hazardType}`);
       }
     });
 
-    console.log(`📊 Intersection check complete: ${advisories.length} advisories found`);
     return {
       hasIntersection: advisories.length > 0,
       advisories
@@ -447,11 +417,8 @@ class GAirmetService {
   // Enhanced polygon intersection check with better logging
   static checkPolygonIntersection(routeCoords, gairmetCoords) {
     if (!routeCoords || !gairmetCoords || gairmetCoords.length < 3) {
-      console.log('    ⚠️ Invalid coordinates for intersection check');
       return false;
     }
-
-    console.log(`    🔍 Checking ${routeCoords.length} route points against G-AIRMET polygon with ${gairmetCoords.length} vertices`);
 
     // Check if any route point falls within the G-AIRMET polygon
     const intersectingPoints = [];
@@ -470,10 +437,7 @@ class GAirmetService {
     });
 
     if (hasIntersection) {
-      console.log(`    ✅ Found ${intersectingPoints.length} intersecting points:`, 
-        intersectingPoints.map(p => `Point ${p.index} [${p.coordinates[0].toFixed(2)}, ${p.coordinates[1].toFixed(2)}]`).join(', '));
-    } else {
-      console.log(`    ❌ No route points intersect with this G-AIRMET polygon`);
+      // Found intersecting points
     }
 
     return hasIntersection;
@@ -513,13 +477,10 @@ class GAirmetService {
   // Main method to get turbulence advisories for a route
   static async getTurbulenceAdvisories(departure, arrival, routeCoordinates) {
     try {
-      console.log(`🌪️ Getting G-AIRMET turbulence advisories for ${departure}-${arrival}`);
-      
       // Fetch G-AIRMET data for the last 6 hours
       const gairmets = await this.fetchGAirmets('all', 6);
       
       if (!gairmets || gairmets.length === 0) {
-        console.log('ℹ️ No G-AIRMET data available - no advisories to check');
         return { hasAdvisories: false, advisories: [] };
       }
 
@@ -527,14 +488,12 @@ class GAirmetService {
       const intersection = this.checkRouteIntersection(routeCoordinates, gairmets);
       
       if (intersection.hasIntersection) {
-        console.log(`✅ Found ${intersection.advisories.length} G-AIRMET advisories affecting route`);
         return {
           hasAdvisories: true,
           advisories: intersection.advisories,
           source: 'G-AIRMET'
         };
       } else {
-        console.log('ℹ️ No G-AIRMET advisories affecting this route');
         return {
           hasAdvisories: false,
           advisories: [],
@@ -543,7 +502,7 @@ class GAirmetService {
       }
       
     } catch (error) {
-      console.error(`❌ Error getting G-AIRMET advisories:`, error.message);
+      console.error(`Error getting G-AIRMET advisories:`, error.message);
       return { hasAdvisories: false, advisories: [], error: error.message };
     }
   }
@@ -551,13 +510,10 @@ class GAirmetService {
   // Get all current G-AIRMETs worldwide
   static async getAllCurrentGAirmets() {
     try {
-      console.log(`🌍 Fetching all current G-AIRMETs worldwide`);
-      
       // Fetch G-AIRMET data for the last 6 hours, all regions
       const gairmets = await this.fetchGAirmets('all', 6);
       
       if (!gairmets || gairmets.length === 0) {
-        console.log('ℹ️ No G-AIRMET data available - no advisories to display');
         return [];
       }
 
@@ -573,11 +529,10 @@ class GAirmetService {
         rawData: gairmet.rawXml || null
       }));
 
-      console.log(`✅ Retrieved ${transformedGairmets.length} current G-AIRMETs`);
       return transformedGairmets;
       
     } catch (error) {
-      console.error(`❌ Error getting all G-AIRMETs:`, error.message);
+      console.error(`Error getting all G-AIRMETs:`, error.message);
       return [];
     }
   }
