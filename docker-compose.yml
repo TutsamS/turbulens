@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # Backend service (Node.js/Express API)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - NODE_ENV=development
+      - PORT=5001
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      # Mount source code for development (hot reload)
+      - ./backend:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - turbulens-network
+
+  # Frontend service (React app)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - turbulens-network
+
+# Define networks for service communication
+networks:
+  turbulens-network:
+    driver: bridge
