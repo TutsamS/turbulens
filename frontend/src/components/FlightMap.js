@@ -36,7 +36,7 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
 
   // Check if weather layer API key is available
   useEffect(() => {
-    const apiKey = 'your_openweather_api_key_here';
+    const apiKey = '38c84f3958c16d4c64ac0936426d9230';
     const isValid = apiKey && apiKey !== 'your_openweather_api_key_here' && apiKey !== 'demo';
     setWeatherLayerAvailable(isValid);
   }, []);
@@ -285,7 +285,7 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
         {/* Weather layer overlay - only show if API key is available */}
         {weatherLayerAvailable && (
           <TileLayer
-            url={`https://tile.openweathermap.org/map/${weatherLayer}/{z}/{x}/{y}.png?appid=your_openweather_api_key_here`}
+            url={`https://tile.openweathermap.org/map/${weatherLayer}/{z}/{x}/{y}.png?appid=38c84f3958c16d4c64ac0936426d9230`}
             attribution='&copy; <a href="https://openweathermap.org/">OpenWeatherMap</a>'
             opacity={0.8}
             zIndex={1000}
@@ -495,9 +495,9 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
                 </div>
               </div>
               <div className="map-tips">
-                <p>💡 <strong>Tip:</strong> Click on the weather waypoints to see detailed conditions along your flight path. {weatherLayerAvailable ? 'Use the weather layer selector to view different weather data.' : 'Add your OpenWeatherMap API key to the frontend .env file to enable weather layers.'}</p>
+                <p><strong>Tip:</strong> Click on the weather waypoints to see detailed conditions along your flight path. {weatherLayerAvailable ? 'Use the weather layer selector to view different weather data.' : 'Add your OpenWeatherMap API key to the frontend .env file to enable weather layers.'}</p>
                 {weatherLayerAvailable && (
-                  <p>🌤️ <strong>Weather Layer Active:</strong> {currentLayer?.name} - You should see weather data overlaid on the map!</p>
+                  <p><strong>Weather Layer Active:</strong> {currentLayer?.name} - You should see weather data overlaid on the map!</p>
                 )}
               </div>
             </div>

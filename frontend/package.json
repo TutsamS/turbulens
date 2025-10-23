@@ -8,37 +8,24 @@
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.4.0",
     "leaflet": "^1.9.4",
-    "leaflet.antimeridian": "https://github.com/briannaAndCo/Leaflet.Antimeridian.git",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-leaflet": "^4.2.1",
-    "react-scripts": "5.0.1",
     "recharts": "^2.7.2",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "echo \"No test specified\""
   },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  },
-  "proxy": "http://localhost:5000"
+
+  "proxy": "http://localhost:5001",
+  "devDependencies": {
+    "@craco/craco": "^7.1.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "vite": "^6.3.5"
+  }
 }
