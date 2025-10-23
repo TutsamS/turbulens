@@ -4,8 +4,6 @@ class FlightPathService {
   // Get route between two airports using SimpleRouteService
   static async getRouteByAirports(departure, arrival) {
     try {
-      console.log(`🛫 FlightPathService: Getting route from ${departure} to ${arrival}`);
-      
       // Use SimpleRouteService to generate the route
       const route = await SimpleRouteService.generateRoute(departure, arrival);
       
@@ -28,15 +26,10 @@ class FlightPathService {
         generatedAt: route.generatedAt
       };
       
-      console.log(`✅ Route generated successfully: ${departure} → ${arrival}`);
-      console.log(`🌪️ Turbulence: ${route.turbulenceLevel}`);
-      console.log(`📏 Distance: ${route.distance} miles`);
-      console.log(`⏱️ Duration: ${route.estimatedDuration}`);
-      
       return transformedRoute;
       
     } catch (error) {
-      console.error(`❌ Error generating route from ${departure} to ${arrival}:`, error.message);
+      console.error(`Error generating route from ${departure} to ${arrival}:`, error.message);
       throw new Error(`Failed to generate route: ${error.message}`);
     }
   }
@@ -63,7 +56,7 @@ class FlightPathService {
         const route = await this.getRouteByAirports(dep, arr);
         routes.push(route);
       } catch (error) {
-        console.log(`⚠️ Skipping ${dep}-${arr}: ${error.message}`);
+        // Skip failed routes
       }
     }
     
@@ -100,7 +93,7 @@ class FlightPathService {
           
           if (matchingRoutes.length >= limit) break;
         } catch (error) {
-          console.log(`⚠️ Skipping ${dep}-${arr}: ${error.message}`);
+          // Skip failed routes
         }
       }
     }
@@ -120,23 +113,9 @@ class FlightPathService {
     return route.currentTurbulence || { level: 'Unknown', confidence: 'Low', factors: [] };
   }
 
-  // Get real-time flight data (placeholder for future enhancements)
+  // Get real-time flight data
   static async getRealTimeFlights(routeId) {
-    // This could be enhanced with real-time flight tracking APIs in the future
-    return {
-      routeId,
-      activeFlights: Math.floor(Math.random() * 3) + 1,
-      lastUpdated: new Date().toISOString(),
-      flights: [
-        {
-          flightNumber: 'AA123',
-          status: 'In Flight',
-          altitude: '35000 ft',
-          speed: '550 mph',
-          estimatedArrival: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
-        }
-      ]
-    };
+    throw new Error('Real-time flight data not implemented');
   }
 
   // Get airport information

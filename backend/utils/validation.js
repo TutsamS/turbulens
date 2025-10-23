@@ -34,12 +34,6 @@ const validateFlightData = (data) => {
       if (inputDate < today) {
         errors.push('Date cannot be in the past');
       }
-      
-      // Optional: Add some debugging
-      console.log('🔍 Date validation debug:');
-      console.log('  Input date:', data.date, '→', inputDate.toISOString());
-      console.log('  Today (midnight):', today.toISOString());
-      console.log('  Is input < today?', inputDate < today);
     }
   }
 

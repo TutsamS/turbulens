@@ -12,29 +12,29 @@ router.post('/predict', async (req, res) => {
   try {
     const { departure, arrival, date } = req.body;
     
-    console.log('📥 Received prediction request:', { departure, arrival, date });
+    console.log('Received prediction request:', { departure, arrival, date });
     
     // Validate input data
     const validation = validateFlightData({ departure, arrival, date });
     if (!validation.isValid) {
-      console.log('❌ Validation failed:', validation.errors);
+      console.log('Validation failed:', validation.errors);
       return res.status(400).json({ 
         error: 'Invalid input data', 
         details: validation.errors 
       });
     }
 
-    console.log('✅ Validation passed, calling SimpleRouteService.generateRoute...');
+    console.log('Validation passed, calling SimpleRouteService.generateRoute...');
 
     // Get turbulence prediction with G-AIRMET data
     const prediction = await SimpleRouteService.generateRoute(departure, arrival);
     
-    console.log(`🚀 Turbulence route response keys:`, Object.keys(prediction));
+    console.log(`Turbulence route response keys:`, Object.keys(prediction));
 
     res.json(prediction);
   } catch (error) {
-    console.error('❌ Turbulence prediction error:', error);
-    console.error('❌ Error stack:', error.stack);
+    console.error('Turbulence prediction error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ 
       error: 'Failed to predict turbulence',
       message: error.message 
@@ -48,29 +48,10 @@ router.get('/history/:route', async (req, res) => {
     const { route } = req.params;
     const { days = 7 } = req.query;
     
-    // For now, return mock historical data since TurbulenceService is not implemented
-    const mockHistory = {
-      success: true,
-      data: {
-        route: route,
-        days: parseInt(days),
-        predictions: [
-          {
-            date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            turbulenceLevel: 'Low',
-            confidence: 0.85
-          },
-          {
-            date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            turbulenceLevel: 'Moderate',
-            confidence: 0.72
-          }
-        ]
-      },
-      message: 'Mock historical data retrieved successfully'
-    };
-    
-    res.json(mockHistory);
+    res.status(501).json({ 
+      error: 'Historical data not implemented',
+      message: 'This feature is not yet available'
+    });
   } catch (error) {
     console.error('Historical data error:', error);
     res.status(500).json({ 
@@ -83,7 +64,6 @@ router.get('/history/:route', async (req, res) => {
 // GET /api/turbulence/airports
 router.get('/airports', async (req, res) => {
   try {
-    // For now, return a list of common airports since we don't have a getAllAirports method
     const commonAirports = [
       { code: 'JFK', name: 'John F. Kennedy International Airport', city: 'New York', country: 'USA' },
       { code: 'LAX', name: 'Los Angeles International Airport', city: 'Los Angeles', country: 'USA' },

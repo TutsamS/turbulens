@@ -24,7 +24,7 @@ class SimpleRouteService {
     const crossesDateLine = lngDiff > 180;
     
     if (crossesDateLine) {
-      console.log(`🌍 Route crosses antimeridian (longitude difference: ${lngDiff.toFixed(2)}°)`);
+      // Route crosses antimeridian - handled by Leaflet antimeridian plugin
     }
     
     // Convert to radians
@@ -94,7 +94,7 @@ class SimpleRouteService {
       
       return fallbackAirports[iataCode.toUpperCase()] || null;
     } catch (error) {
-      console.error(`❌ Error getting airport coordinates for ${iataCode}:`, error.message);
+      console.error(`Error getting airport coordinates for ${iataCode}:`, error.message);
       return null;
     }
   }
@@ -104,7 +104,7 @@ class SimpleRouteService {
     try {
       return await this.airportService.getAllAirports();
     } catch (error) {
-      console.error('❌ Error getting all airports:', error.message);
+      console.error('Error getting all airports:', error.message);
       return [];
     }
   }
@@ -122,7 +122,6 @@ class SimpleRouteService {
       batches.push(coordinates.slice(i, i + batchSize));
     }
     
-    console.log(`🌤️ Processing ${coordinates.length} waypoints in ${batches.length} batches`);
     
     for (const batch of batches) {
       const batchPromises = batch.map(async ([lat, lng]) => {
@@ -130,40 +129,7 @@ class SimpleRouteService {
         
         try {
           if (!apiKey) {
-            console.log('⚠️ OpenWeather API key not found, using mock weather data');
-            
-            // Generate more realistic mock weather data that includes Light turbulence conditions
-            const windSpeedOptions = [
-              // Light turbulence conditions (30% of the time)
-              Math.random() * 20 + 20,  // 20-40 mph (Light)
-              Math.random() * 15 + 25,  // 25-40 mph (Light)
-              Math.random() * 10 + 30,  // 30-40 mph (Light)
-              
-              // Light to Moderate conditions (25% of the time)
-              Math.random() * 15 + 45,  // 45-60 mph (Light to Moderate)
-              Math.random() * 20 + 50,  // 50-70 mph (Light to Moderate)
-              
-              // Moderate conditions (25% of the time)
-              Math.random() * 20 + 70,  // 70-90 mph (Moderate)
-              Math.random() * 15 + 80,  // 80-95 mph (Moderate)
-              
-              // Higher turbulence conditions (20% of the time)
-              Math.random() * 30 + 100, // 100-130 mph (Moderate to Severe)
-              Math.random() * 20 + 120  // 120-140 mph (Severe)
-            ];
-            
-            const windSpeed = windSpeedOptions[Math.floor(Math.random() * windSpeedOptions.length)];
-            
-            return {
-              coordinates: [lat, lng],
-              weather: {
-                windSpeed: windSpeed,
-                temperature: Math.random() * 40 - 40, // Mock temperature -40 to 0°F (high-altitude)
-                humidity: Math.random() * 40 + 20, // Mock humidity 20-60% (high-altitude)
-                pressure: Math.random() * 10 + 300, // Mock pressure 300-310 hPa (high-altitude)
-                description: 'Clear skies'
-              }
-            };
+            throw new Error('OpenWeather API key not found');
           }
           
           // Make API call to OpenWeatherMap with timeout
@@ -185,18 +151,7 @@ class SimpleRouteService {
           };
           
         } catch (error) {
-          console.log(`❌ Error getting weather for [${lat}, ${lng}]:`, error.message);
-          // Fallback to mock data
-          return {
-            coordinates: [lat, lng],
-            weather: {
-              windSpeed: Math.random() * 100 + 30, // High-altitude wind speeds
-              temperature: Math.random() * 40 - 40, // High-altitude temperatures
-              humidity: Math.random() * 40 + 20, // High-altitude humidity
-              pressure: Math.random() * 10 + 300, // High-altitude pressure
-              description: 'Data unavailable'
-            }
-          };
+          throw new Error(`Failed to fetch weather for [${lat}, ${lng}]: ${error.message}`);
         }
       });
       
@@ -208,14 +163,11 @@ class SimpleRouteService {
             weatherData.push(result.value);
           }
         });
-        console.log(`✅ Batch completed: ${batchResults.filter(r => r.status === 'fulfilled').length}/${batch.length} successful`);
       } catch (error) {
-        console.log(`⚠️ Batch processing failed:`, error.message);
         // Continue with next batch
       }
     }
     
-    console.log(`🌤️ Weather data collected for ${weatherData.length}/${coordinates.length} waypoints`);
     return weatherData;
   }
 
@@ -272,8 +224,6 @@ class SimpleRouteService {
     
     // Enhance with G-AIRMET data if available
     if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
-      console.log(`🌪️ G-AIRMET advisories found: ${gairmetAdvisories.advisories.length} affecting route`);
-      
       // Get comprehensive G-AIRMET analysis
       const gairmetAnalysis = this.analyzeGAirmetImpact(gairmetAdvisories.advisories, weatherData);
       
@@ -283,23 +233,17 @@ class SimpleRouteService {
       
       // Special handling: Always upgrade from "Light" if G-AIRMET suggests higher
       if (finalLevel === 'Light' && gairmetLevelValue > currentLevelValue) {
-        console.log(`⬆️ Upgrading turbulence from ${finalLevel} to ${gairmetAnalysis.recommendedLevel} based on G-AIRMET (Light → Higher)`);
         finalLevel = gairmetAnalysis.recommendedLevel;
       }
       // Special handling: Always upgrade from "Light to Moderate" if G-AIRMET suggests "Moderate" or higher
       else if (finalLevel === 'Light to Moderate' && gairmetLevelValue >= this.getSeverityValue('Moderate')) {
-        console.log(`⬆️ Upgrading turbulence from ${finalLevel} to ${gairmetAnalysis.recommendedLevel} based on G-AIRMET (Light to Moderate → Moderate+)`);
         finalLevel = gairmetAnalysis.recommendedLevel;
       }
       // For other cases, use a lower threshold to be more sensitive to G-AIRMET
       else if (gairmetLevelValue > currentLevelValue + 0.2) { // Reduced from 0.5 to 0.2
-        console.log(`⬆️ Upgrading turbulence from ${finalLevel} to ${gairmetAnalysis.recommendedLevel} based on G-AIRMET`);
         finalLevel = gairmetAnalysis.recommendedLevel;
       } else if (gairmetLevelValue < currentLevelValue - 0.8) { // Only downgrade with significant difference
-        console.log(`⬇️ Downgrading turbulence from ${finalLevel} to ${gairmetAnalysis.recommendedLevel} based on G-AIRMET`);
         finalLevel = gairmetAnalysis.recommendedLevel;
-      } else {
-        console.log(`📊 G-AIRMET confirms current turbulence level: ${finalLevel}`);
       }
     }
     
@@ -311,8 +255,6 @@ class SimpleRouteService {
     if (!advisories || advisories.length === 0) {
       return { shouldUpgrade: false, shouldDowngrade: false, recommendedLevel: null };
     }
-
-    console.log(`🔍 Analyzing ${advisories.length} G-AIRMET advisories for route impact`);
 
     // Analyze each advisory
     const advisoryAnalysis = advisories.map(advisory => {
@@ -328,8 +270,6 @@ class SimpleRouteService {
       if (cruisingAltitude >= altitude.min && cruisingAltitude <= altitude.max) {
         impactWeight *= 1.5; // Higher impact if covers cruising altitude
       }
-      
-      console.log(`  📋 Advisory: ${severity} turbulence in ${area} (alt: ${altitude.min}-${altitude.max}ft, weight: ${impactWeight.toFixed(2)})`);
       
       return {
         severity,
@@ -434,7 +374,6 @@ class SimpleRouteService {
       const endpoint = process.env.AI_MODEL_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
       
       if (!apiKey) {
-        console.log('⚠️ OpenAI API key not found, skipping AI analysis');
         return null;
       }
 
@@ -478,8 +417,6 @@ Please provide a concise 4-5 sentence summary that includes:
 
 Keep it clear, professional, and easy to understand. Reference specific geographic or meteorological factors when relevant.`;
 
-      console.log('🤖 Calling OpenAI for enhanced turbulence analysis...');
-      
       const response = await axios.post(endpoint, {
         model: "gpt-4o-mini",
         messages: [
@@ -504,8 +441,6 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
 
       if (response.data && response.data.choices && response.data.choices[0]) {
         const aiResponse = response.data.choices[0].message.content;
-        console.log('✅ OpenAI analysis received');
-        console.log('🤖 AI Summary:', aiResponse.trim());
         
         // Use the final G-AIRMET enhanced turbulence level instead of extracting from AI response
         // This ensures consistency between the main prediction and AI analysis
@@ -520,16 +455,13 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       throw new Error('Invalid response from OpenAI');
       
     } catch (error) {
-      console.error('❌ Error calling OpenAI API:', error.message);
-      console.log('🔄 Falling back to rule-based prediction');
+      console.error('Error calling OpenAI API:', error.message);
       return null;
     }
   }
 
   // Generate complete route with weather data
   static async generateRoute(departure, arrival) {
-    console.log(`🛫 Generating route from ${departure} to ${arrival}`);
-    
     // Get airport coordinates
     const depAirport = await this.getAirportCoordinates(departure);
     const arrAirport = await this.getAirportCoordinates(arrival);
@@ -538,9 +470,6 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       throw new Error(`Airport not found: ${!depAirport ? departure : arrival}`);
     }
     
-    console.log(`📍 ${departure}: [${depAirport.lat}, ${depAirport.lng}] - ${depAirport.name}`);
-    console.log(`📍 ${arrival}: [${arrAirport.lat}, ${arrAirport.lng}] - ${arrAirport.name}`);
-    
     // Generate great circle waypoints
     const waypoints = this.generateGreatCirclePath(
       depAirport.lat, depAirport.lng,
@@ -548,37 +477,32 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       15 // Number of waypoints (restored to original for better accuracy)
     );
     
-     console.log(`🛤️ Generated ${waypoints.length} waypoints`);
+    // Get weather data for each waypoint
+    const weatherData = await this.getWeatherForCoordinates(waypoints);
      
-     // Get weather data for each waypoint
-     console.log('🌤️ Fetching weather data...');
-     const weatherData = await this.getWeatherForCoordinates(waypoints);
-     
-     // Get G-AIRMET turbulence advisories for enhanced accuracy
-     let gairmetAdvisories = null;
-     let allGairmets = null;
-     
-     try {
-       const gairmetPromise = Promise.all([
-         GAirmetService.getTurbulenceAdvisories(departure, arrival, waypoints),
-         GAirmetService.getAllCurrentGAirmets()
-       ]);
-       
-       const [advisories, allGairmetsData] = await Promise.race([
-         gairmetPromise,
-         new Promise((_, reject) => 
-           setTimeout(() => reject(new Error('G-AIRMET timeout')), 8000) // 8 second timeout
-         )
-       ]);
-       
-       gairmetAdvisories = advisories;
-       allGairmets = allGairmetsData;
-       console.log('✅ G-AIRMET data loaded successfully');
-       
-     } catch (error) {
-       console.log(`⚠️ G-AIRMET data unavailable (${error.message}), continuing without it`);
-       // Continue without G-AIRMET data - not critical for basic route analysis
-     }
+    // Get G-AIRMET turbulence advisories for enhanced accuracy
+    let gairmetAdvisories = null;
+    let allGairmets = null;
+    
+    try {
+      const gairmetPromise = Promise.all([
+        GAirmetService.getTurbulenceAdvisories(departure, arrival, waypoints),
+        GAirmetService.getAllCurrentGAirmets()
+      ]);
+      
+      const [advisories, allGairmetsData] = await Promise.race([
+        gairmetPromise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('G-AIRMET timeout')), 8000) // 8 second timeout
+        )
+      ]);
+      
+      gairmetAdvisories = advisories;
+      allGairmets = allGairmetsData;
+      
+    } catch (error) {
+      // Continue without G-AIRMET data - not critical for basic route analysis
+    }
      
      // Calculate weather-based turbulence (before G-AIRMET enhancement)
      const weatherBasedTurbulence = this.calculateTurbulence(weatherData, null);
@@ -603,7 +527,6 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
         )
       ]);
     } catch (error) {
-      console.log(`⚠️ AI analysis failed or timed out: ${error.message}`);
       // Continue without AI analysis
     }
     
@@ -652,22 +575,6 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
           originalTurbulenceLevel: weatherBasedTurbulence // Keep original weather-based prediction for comparison
         };
     
-                  console.log(`✅ Route generated successfully!`);
-         console.log(`🌪️ Turbulence: ${finalTurbulenceLevel}${aiAnalysis ? ' (AI Enhanced)' : ' (Rule-based)'}`);
-         console.log(`📊 Confidence: ${Math.round(finalConfidence * 100)}%${aiAnalysis ? ' (AI + Rule-based)' : ' (Rule-based only)'}`);
-         if (aiAnalysis?.summary) {
-           console.log(`🤖 AI Summary: ${aiAnalysis.summary}`);
-         }
-         console.log(`📏 Distance: ${Math.round(distance)} miles`);
-         console.log(`⏱️ Estimated Duration: ${route.estimatedDuration}`);
-         console.log(`🚨 G-AIRMET Advisories: ${gairmetAdvisories?.hasAdvisories ? gairmetAdvisories.advisories.length : 0} affecting route`);
-         console.log(`🌍 All G-AIRMETs: ${allGairmets?.length || 0} worldwide`);
-         if (aiAnalysis) {
-           console.log(`🤖 AI Analysis: Enhanced from ${turbulenceLevel} to ${finalTurbulenceLevel}`);
-         }
-         if (weatherBasedTurbulence !== turbulenceLevel) {
-           console.log(`🌪️ G-AIRMET Enhancement: ${weatherBasedTurbulence} → ${turbulenceLevel}`);
-         }
     return route;
   }
 
@@ -897,12 +804,10 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       const gairmetVariation = (Math.random() - 0.5) * 0.08; // ±4% additional variation
       confidence += Math.min(totalGairmetBoost + gairmetVariation, 0.45); // Cap at 45% total boost
       
-      console.log(`📊 G-AIRMET confidence boost: +${Math.round((totalGairmetBoost + gairmetVariation) * 100)}% (base: ${Math.round(baseGairmetBoost * 100)}%, dynamic: ${Math.round(dynamicBoost * 100)}%, variation: ${Math.round(gairmetVariation * 100)}%)`);
     } else {
       // No G-AIRMET data - add large random variation
       const noGairmetVariation = (Math.random() - 0.5) * 0.15; // ±7.5% variation
       confidence += noGairmetVariation;
-      console.log(`📊 No G-AIRMET data: ${Math.round(noGairmetVariation * 100)}% confidence adjustment`);
     }
     
     // Factor 3: Large random atmospheric factors (simulate real-world uncertainty)
@@ -918,13 +823,8 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
     const predictionReliability = (Math.random() - 0.5) * 0.14; // ±7% prediction reliability
     confidence += predictionReliability;
     
-    // Log the random factors for debugging
-    console.log(`🎲 Random factors applied: Weather=${Math.round(weatherQualityVariation * 100)}%, Atmospheric=${Math.round(atmosphericUncertainty * 100)}%, Model=${Math.round(weatherModelAccuracy * 100)}%, Route=${Math.round(routeComplexity * 100)}%, Reliability=${Math.round(predictionReliability * 100)}%`);
-    
     // Ensure confidence is between 0.3 and 0.98
     confidence = Math.max(0.3, Math.min(0.98, confidence));
-    
-    console.log(`🎯 Final confidence: ${Math.round(confidence * 100)}%`);
     
     // Round to 2 decimal places
     return Math.round(confidence * 100) / 100;
