@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './FlightSearch.css';
+import AirportSearchDropdown from './AirportSearchDropdown';
 
 function FlightSearch({ onSearch, isOpen, onClose }) {
   const [departure, setDeparture] = useState('');
@@ -79,9 +80,6 @@ function FlightSearch({ onSearch, isOpen, onClose }) {
         </div>
         
         <div className="popup-content">
-          <p className="subtitle">
-            Enter the IATA codes for your departure and arrival airports to get your AI turbulence prediction!
-          </p>
           
           <form onSubmit={handleSubmit} className="search-form" 
                 onMouseDown={(e) => e.stopPropagation()}
@@ -90,51 +88,122 @@ function FlightSearch({ onSearch, isOpen, onClose }) {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="departure">Departure Airport</label>
-                <input
-                  type="text"
-                  id="departure"
-                  className="input"
-                  placeholder="e.g., JFK, LAX, LHR"
+                <AirportSearchDropdown
                   value={departure}
-                  onChange={(e) => setDeparture(e.target.value)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onMouseUp={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  required
+                  onChange={setDeparture}
+                  placeholder="Airport name or code"
+                  onSelect={(airport) => {
+                    setDeparture(airport.code);
+                    console.log('Selected departure:', airport);
+                  }}
+                  className="airport-search-field"
                 />
               </div>
               
               <div className="form-group">
                 <label htmlFor="arrival">Arrival Airport</label>
-                <input
-                  type="text"
-                  id="arrival"
-                  className="input"
-                  placeholder="e.g., LAX, JFK, CDG"
+                <AirportSearchDropdown
                   value={arrival}
-                  onChange={(e) => setArrival(e.target.value)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onMouseUp={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  required
+                  onChange={setArrival}
+                  placeholder="Airport name or code"
+                  onSelect={(airport) => {
+                    setArrival(airport.code);
+                    console.log('Selected arrival:', airport);
+                  }}
+                  className="airport-search-field"
                 />
               </div>
             </div>
             
             <div className="iata-help">
               <p className="iata-note">
-                🔍 <strong>Don't know your airport code?</strong>
+                ✨ <strong>Search Tips:</strong>
               </p>
-              <button 
-                type="button" 
-                className="iata-link-btn"
-                onClick={openIATALookup}
-              >
-                📋 Look up IATA Airport Codes
-              </button>
+              <ul className="search-tips">
+                <li>Type airport names like "London Heathrow" or "John F Kennedy"</li>
+                <li>Use IATA codes like "LHR" or "JFK"</li>
+                <li>Search by city names like "New York" or "Los Angeles"</li>
+                <li>Results appear as you type (minimum 2 characters)</li>
+              </ul>
               <p className="iata-explanation">
-                Use the official IATA code search to find the 3-letter airport codes for any airport worldwide.
+                Still need help? <button 
+                  type="button" 
+                  className="iata-link-btn"
+                  onClick={openIATALookup}
+                >
+                  📋 Look up IATA Airport Codes
+                </button>
               </p>
+            </div>
+            
+            <button type="submit" className="btn">
+              Predict Turbulence
+            </button>
+            
+            <div className="popular-routes-section">
+              <h4 className="popular-routes-title">Popular Routes</h4>
+              <div className="popular-routes-grid">
+                <button 
+                  className="popular-route-btn"
+                  onClick={() => {
+                    setDeparture('LHR');
+                    setArrival('JFK');
+                  }}
+                >
+                  <span className="route-codes">LHR → JFK</span>
+                  <span className="route-description">London → New York</span>
+                </button>
+                <button 
+                  className="popular-route-btn"
+                  onClick={() => {
+                    setDeparture('CDG');
+                    setArrival('LAX');
+                  }}
+                >
+                  <span className="route-codes">CDG → LAX</span>
+                  <span className="route-description">Paris → Los Angeles</span>
+                </button>
+                <button 
+                  className="popular-route-btn"
+                  onClick={() => {
+                    setDeparture('NRT');
+                    setArrival('SFO');
+                  }}
+                >
+                  <span className="route-codes">NRT → SFO</span>
+                  <span className="route-description">Tokyo → San Francisco</span>
+                </button>
+                <button 
+                  className="popular-route-btn"
+                  onClick={() => {
+                    setDeparture('DXB');
+                    setArrival('LHR');
+                  }}
+                >
+                  <span className="route-codes">DXB → LHR</span>
+                  <span className="route-description">Dubai → London</span>
+                </button>
+                <button 
+                  className="popular-route-btn"
+                  onClick={() => {
+                    setDeparture('SYD');
+                    setArrival('LAX');
+                  }}
+                >
+                  <span className="route-codes">SYD → LAX</span>
+                  <span className="route-description">Sydney → Los Angeles</span>
+                </button>
+                <button 
+                  className="popular-route-btn"
+                  onClick={() => {
+                    setDeparture('FRA');
+                    setArrival('JFK');
+                  }}
+                >
+                  <span className="route-codes">FRA → JFK</span>
+                  <span className="route-description">Frankfurt → New York</span>
+                </button>
+              </div>
             </div>
             
             <div className="form-group">
@@ -162,53 +231,7 @@ function FlightSearch({ onSearch, isOpen, onClose }) {
                 </p>
               </div>
             </div>
-            
-            <button type="submit" className="btn">
-            Predict Turbulence
-            </button>
           </form>
-          
-          <div className="examples">
-            <h4>Popular Routes:</h4>
-            <div className="example-routes">
-              <button 
-                className="example-btn"
-                onClick={() => {
-                  setDeparture('LHR');
-                  setArrival('JFK');
-                }}
-              >
-                LHR → JFK
-              </button>
-              <button 
-                className="example-btn"
-                onClick={() => {
-                  setDeparture('SFO');
-                  setArrival('EWR');
-                }}
-              >
-                SFO → EWR
-              </button>
-              <button 
-                className="example-btn"
-                onClick={() => {
-                  setDeparture('LAX');
-                  setArrival('HND');
-                }}
-              >
-                LAX → HND
-              </button>
-              <button 
-                className="example-btn"
-                onClick={() => {
-                  setDeparture('SAN');
-                  setArrival('MEX');
-                }}
-              >
-                SAN → MEX
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

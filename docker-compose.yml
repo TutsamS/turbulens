@@ -12,7 +12,7 @@ services:
       - NODE_ENV=development
       - PORT=5001
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AI_API_KEY=${AI_API_KEY}
     volumes:
       # Mount source code for development (hot reload)
       - ./backend:/app

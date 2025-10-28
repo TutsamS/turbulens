@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './FlightMap.css';
@@ -16,6 +16,30 @@ L.Icon.Default.mergeOptions({
   iconUrl: markerIcon,
   shadowUrl: markerShadow,
 });
+
+// Component to automatically fit map bounds to route
+const FitBounds = ({ coordinates }) => {
+  const map = useMap();
+  
+  useEffect(() => {
+    if (coordinates && coordinates.length > 0) {
+      const validCoordinates = coordinates.filter(coord => coord && coord[0] != null && coord[1] != null);
+      
+      if (validCoordinates.length > 0) {
+        // Create bounds from all coordinates
+        const bounds = L.latLngBounds(validCoordinates);
+        
+        // Fit bounds with padding
+        map.fitBounds(bounds, {
+          padding: [20, 20], // Add 20px padding on all sides
+          maxZoom: 10 // Prevent zooming too close
+        });
+      }
+    }
+  }, [coordinates, map]);
+  
+  return null;
+};
 
 const FlightMap = ({ selectedRoute, predictionData }) => {
   const [selectedRouteData, setSelectedRouteData] = useState(null);
@@ -36,7 +60,7 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
 
   // Check if weather layer API key is available
   useEffect(() => {
-    const apiKey = 'your_openweather_api_key_here';
+    const apiKey = '38c84f3958c16d4c64ac0936426d9230';
     const isValid = apiKey && apiKey !== 'your_openweather_api_key_here' && apiKey !== 'demo';
     setWeatherLayerAvailable(isValid);
   }, []);
@@ -50,7 +74,7 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
         departure: predictionData.route.departure,
         arrival: predictionData.route.arrival,
         coordinates: predictionData.route.coordinates,
-        weatherData: predictionData.weatherData || [],
+        weatherData: predictionData.multiAltitudeWeather || predictionData.weatherData || [],
         distance: predictionData.distance,
         avgDuration: predictionData.estimatedDuration,
         frequency: 'On-demand'
@@ -118,17 +142,6 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
     return '🌤️'; // Default
   };
 
-  // Function to add offset to coordinates to prevent overlapping
-  const addOffset = (coordinates, offsetLat, offsetLng) => {
-    return [coordinates[0] + offsetLat, coordinates[1] + offsetLng];
-  };
-
-  // Function to check if coordinates are close to departure/arrival
-  const isNearAirport = (coord, airportCoord, threshold = 0.5) => {
-    const latDiff = Math.abs(coord[0] - airportCoord[0]);
-    const lngDiff = Math.abs(coord[1] - airportCoord[1]);
-    return latDiff < threshold && lngDiff < threshold;
-  };
 
   // Function to handle antimeridian crossing routes
   const splitRouteForAntimeridian = (coordinates) => {
@@ -192,44 +205,6 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
 
   const currentLayer = getCurrentLayerInfo();
   
-  // Calculate map center and zoom based on route bounds
-  let mapCenter = [30, 0];
-  let mapZoom = 4;
-  
-  if (selectedRouteData && selectedRouteData.coordinates && selectedRouteData.coordinates.length > 0) {
-    const validCoordinates = selectedRouteData.coordinates.filter(coord => coord && coord[0] != null && coord[1] != null);
-    
-    if (validCoordinates.length > 0) {
-      const lats = validCoordinates.map(([lat, lng]) => lat);
-      const lngs = validCoordinates.map(([lat, lng]) => lng);
-      const maxLat = Math.max(...lats);
-      const minLat = Math.min(...lats);
-      const maxLng = Math.max(...lngs);
-      const minLng = Math.min(...lngs);
-      
-      // Calculate center
-      const centerLat = (maxLat + minLat) / 2;
-      const centerLng = (maxLng + minLng) / 2;
-      mapCenter = [centerLat, centerLng];
-      
-      // Calculate zoom based on span
-      const latSpan = maxLat - minLat;
-      const lngSpan = maxLng - minLng;
-      const maxSpan = Math.max(latSpan, lngSpan);
-      
-      // Enhanced zoom calculation for better route visibility
-      if (maxSpan > 180) mapZoom = 1;        // Global routes
-      else if (maxSpan > 90) mapZoom = 2;    // Continental routes
-      else if (maxSpan > 45) mapZoom = 3;    // Regional routes
-      else if (maxSpan > 20) mapZoom = 4;    // Local routes
-      else if (maxSpan > 10) mapZoom = 5;    // City routes
-      else mapZoom = 6;                      // Airport routes
-      
-      console.log(`📍 Map center: [${centerLat.toFixed(2)}, ${centerLng.toFixed(2)}], zoom: ${mapZoom}`);
-      console.log(`📍 Route spans: lat=${latSpan.toFixed(2)}, lng=${lngSpan.toFixed(2)}, max=${maxSpan.toFixed(2)}`);
-    }
-  }
-
   return (
     <div className="flight-map-container">
       <div className="map-header">
@@ -270,12 +245,17 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
       </div>
 
       <MapContainer
-        key={`${selectedRouteData?.departure}-${selectedRouteData?.arrival}-${mapZoom}`}
-        center={mapCenter}
-        zoom={mapZoom}
+        key={`${selectedRouteData?.departure}-${selectedRouteData?.arrival}`}
+        center={[30, 0]}
+        zoom={3}
         style={{ height: '500px', width: '100%' }}
         className="flight-map"
       >
+        {/* Auto-fit bounds to route */}
+        {selectedRouteData?.coordinates && (
+          <FitBounds coordinates={selectedRouteData.coordinates} />
+        )}
+        
         {/* Base map layer */}
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -285,7 +265,7 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
         {/* Weather layer overlay - only show if API key is available */}
         {weatherLayerAvailable && (
           <TileLayer
-            url={`https://tile.openweathermap.org/map/${weatherLayer}/{z}/{x}/{y}.png?appid=your_openweather_api_key_here`}
+            url={`https://tile.openweathermap.org/map/${weatherLayer}/{z}/{x}/{y}.png?appid=38c84f3958c16d4c64ac0936426d9230`}
             attribution='&copy; <a href="https://openweathermap.org/">OpenWeatherMap</a>'
             opacity={0.8}
             zIndex={1000}
@@ -307,15 +287,9 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
                  return null;
                }
                
-               console.log(`📍 Rendering route with ${validCoordinates.length} coordinates`);
-               
                // Split route into segments if it crosses antimeridian
                const routeSegments = splitRouteForAntimeridian(validCoordinates);
                const crossesDateLine = routeSegments.length > 1;
-               
-               if (crossesDateLine) {
-                 console.log(`🌍 Route crosses antimeridian, split into ${routeSegments.length} segments`);
-               }
                
                // Render each segment as a separate polyline
                return routeSegments.map((segment, index) => (
@@ -351,24 +325,26 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
               
               // Check for null coordinates
               if (!weatherCoord || weatherCoord[0] == null || weatherCoord[1] == null) {
-                console.warn(`Weather point ${index} has null coordinates:`, weatherCoord);
                 return null;
               }
               
-              // Check if weather point is near departure or arrival
-              const nearDeparture = departureCoord && isNearAirport(weatherCoord, departureCoord);
-              const nearArrival = arrivalCoord && isNearAirport(weatherCoord, arrivalCoord);
-              
-              // Add offset if near airports
+              // Use original coordinates without offset
               let displayCoord = weatherCoord;
-              if (nearDeparture) {
-                displayCoord = addOffset(weatherCoord, 0.2, 0.2);
-              } else if (nearArrival) {
-                displayCoord = addOffset(weatherCoord, -0.2, -0.2);
+
+              // Handle both old and new weather data structures
+              let weatherData;
+              if (weatherPoint.weather) {
+                // Old structure (single altitude)
+                weatherData = weatherPoint.weather;
+              } else if (weatherPoint.baseWeather) {
+                // New structure (multi-altitude)
+                weatherData = weatherPoint.baseWeather;
+              } else {
+                return null; // Skip if no weather data
               }
 
               // Use weather emoji for each waypoint based on current conditions
-              const weatherEmoji = getWeatherIcon(weatherPoint.weather);
+              const weatherEmoji = getWeatherIcon(weatherData);
 
               return (
                 <Marker
@@ -383,21 +359,15 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
                   <Popup>
                     <div className="weather-popup">
                       <h4>Weather Data</h4>
-                      {weatherPoint.weather ? (
-                        <>
-                          <p><strong>Location:</strong> {weatherPoint.coordinates[0] ? weatherPoint.coordinates[0].toFixed(2) : 'N/A'}, {weatherPoint.coordinates[1] ? weatherPoint.coordinates[1].toFixed(2) : 'N/A'}</p>
-                          <p><strong>Temperature:</strong> {weatherPoint.weather.temperature}°F</p>
-                          <p><strong>Wind Speed:</strong> {weatherPoint.weather.windSpeed} mph</p>
-                          <p><strong>Conditions:</strong> {weatherPoint.weather.description}</p>
-                          <p><strong>Pressure:</strong> {weatherPoint.weather.pressure} hPa</p>
-                          <p><strong>Weather:</strong> {weatherEmoji} {weatherPoint.weather.description}</p>
-                          <div className="weather-icon">
-                            {weatherEmoji}
-                          </div>
-                        </>
-                      ) : (
-                        <p>Weather data unavailable</p>
-                      )}
+                      <p><strong>Location:</strong> {weatherPoint.coordinates[0] ? weatherPoint.coordinates[0].toFixed(2) : 'N/A'}, {weatherPoint.coordinates[1] ? weatherPoint.coordinates[1].toFixed(2) : 'N/A'}</p>
+                      <p><strong>Temperature:</strong> {weatherData.temperature}°F</p>
+                      <p><strong>Wind Speed:</strong> {weatherData.windSpeed} mph</p>
+                      <p><strong>Conditions:</strong> {weatherData.description}</p>
+                      <p><strong>Pressure:</strong> {weatherData.pressure} hPa</p>
+                      <p><strong>Weather:</strong> {weatherEmoji} {weatherData.description}</p>
+                      <div className="weather-icon">
+                        {weatherEmoji}
+                      </div>
                     </div>
                   </Popup>
                 </Marker>
@@ -411,11 +381,11 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
                 {selectedRouteData.coordinates[0] && selectedRouteData.coordinates[0][0] != null && selectedRouteData.coordinates[0][1] != null && (
                   <Marker
                     key="departure"
-                    position={selectedRouteData.coordinates[0]}
+                    position={[selectedRouteData.coordinates[0][0] + 0.3, selectedRouteData.coordinates[0][1] + 0.3]}
                     icon={L.divIcon({
                       className: 'airport-icon departure',
-                      html: '✈️',
-                      iconSize: [24, 24]
+                      html: selectedRouteData.departure,
+                      iconSize: [40, 20]
                     })}
                   >
                     <Popup>
@@ -438,11 +408,11 @@ const FlightMap = ({ selectedRoute, predictionData }) => {
                   return (
                     <Marker
                       key="arrival"
-                      position={lastCoord}
+                      position={[lastCoord[0] - 0.3, lastCoord[1] - 0.3]}
                       icon={L.divIcon({
                         className: 'airport-icon arrival',
-                        html: '🛬',
-                        iconSize: [24, 24]
+                        html: selectedRouteData.arrival,
+                        iconSize: [40, 20]
                       })}
                     >
                       <Popup>

@@ -4,8 +4,12 @@ class FlightPathService {
   // Get route between two airports using SimpleRouteService
   static async getRouteByAirports(departure, arrival) {
     try {
+      console.log(`FlightPathService: Generating route from ${departure} to ${arrival}`);
+      
       // Use SimpleRouteService to generate the route
       const route = await SimpleRouteService.generateRoute(departure, arrival);
+      
+      console.log(`FlightPathService: Route generated successfully, structure:`, Object.keys(route));
       
       // Transform the route to match the expected format
       const transformedRoute = {
@@ -23,13 +27,20 @@ class FlightPathService {
           factors: route.factors
         },
         weatherData: route.weatherData || [], // Get weather data from SimpleRouteService
+        multiAltitudeWeather: route.multiAltitudeWeather || [], // Include multi-altitude weather
+        phaseAnalysis: route.phaseAnalysis || [], // Include phase analysis
+        airportWeather: route.airportWeather || null, // Include airport weather
+        gairmetAdvisories: route.gairmetAdvisories || null, // Include G-AIRMET advisories
+        aiAnalysis: route.aiAnalysis || null, // Include AI analysis
         generatedAt: route.generatedAt
       };
       
+      console.log(`FlightPathService: Route transformed successfully`);
       return transformedRoute;
       
     } catch (error) {
-      console.error(`Error generating route from ${departure} to ${arrival}:`, error.message);
+      console.error(`FlightPathService: Error generating route from ${departure} to ${arrival}:`, error.message);
+      console.error(`FlightPathService: Full error:`, error);
       throw new Error(`Failed to generate route: ${error.message}`);
     }
   }

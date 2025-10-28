@@ -46,9 +46,15 @@ function TurbulencePrediction({ data }) {
           <h2>Turbulence Prediction</h2>
         </div>
         <div className="route-info">
-          <span className="route">
-            {data.route.departure} → {data.route.arrival} 
-          </span>
+          <div className="route-display">
+            <span className="airport departure">
+              {data.airportWeather?.departure?.coordinates?.name || data.route.departure}
+            </span>
+            <img src="/images/arrowplane.png" alt="Flight route" className="route-arrow" />
+            <span className="airport arrival">
+              {data.airportWeather?.arrival?.coordinates?.name || data.route.arrival}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -70,7 +76,7 @@ function TurbulencePrediction({ data }) {
                 <div 
                   key={turbulenceType.level}
                   className={`spectrum-item ${
-                    data.turbulenceLevel.toLowerCase().includes(turbulenceType.level.toLowerCase()) 
+                    data.turbulenceLevel.toLowerCase() === turbulenceType.level.toLowerCase()
                       ? 'predicted' 
                       : ''
                   }`}
@@ -82,7 +88,7 @@ function TurbulencePrediction({ data }) {
                   <div className="spectrum-icon">{turbulenceType.icon}</div>
                   <div className="spectrum-level">{turbulenceType.level}</div>
                   <div className="spectrum-description">{turbulenceType.description}</div>
-                  {data.turbulenceLevel.toLowerCase().includes(turbulenceType.level.toLowerCase()) && (
+                  {data.turbulenceLevel.toLowerCase() === turbulenceType.level.toLowerCase() && (
                     <div className="predicted-indicator">
                       <span className="predicted-badge">PREDICTED</span>
                     </div>
@@ -90,6 +96,47 @@ function TurbulencePrediction({ data }) {
                 </div>
               ))}
             </div>
+            
+            {/* Flight Phase Analysis - Integrated into turbulence levels */}
+            {data.phaseAnalysis && data.phaseAnalysis.length > 0 && (
+              <div className="flight-phases-integrated">
+                <h4>Flight Phase Analysis</h4>
+                {/* Debug logging */}
+                {console.log('Frontend phaseAnalysis:', data.phaseAnalysis)}
+                {console.log('Frontend turbulenceLevel:', data.turbulenceLevel)}
+                {console.log('Frontend data received at:', new Date().toISOString())}
+                {data.phaseAnalysis && data.phaseAnalysis.forEach((phase, idx) => {
+                  console.log(`Frontend Phase ${idx}: ${phase.name} = ${phase.turbulenceLevel}`);
+                })}
+                <div className="phase-cards-container">
+                  {data.phaseAnalysis.map((phase, index) => (
+                    <div key={index} className="phase-card">
+                      <div className="phase-header">
+                        <h5>{phase.name}</h5>
+                        <span className={`turbulence-badge ${phase.turbulenceLevel.toLowerCase().replace(/\s+/g, '-')}`}>
+                          {phase.turbulenceLevel}
+                        </span>
+                      </div>
+                      <div className="phase-details">
+                        <div className="phase-info">
+                          <span className="info-label">Altitude:</span>
+                          <span className="info-value">
+                            {phase.phaseType === 'descent' 
+                              ? `${Math.round(phase.altitudeRange.max/1000)}k - ${Math.round(phase.altitudeRange.min/1000)}k ft`
+                              : `${Math.round(phase.altitudeRange.min/1000)}k - ${Math.round(phase.altitudeRange.max/1000)}k ft`
+                            }
+                          </span>
+                        </div>
+                        <div className="phase-info">
+                          <span className="info-label">Waypoints:</span>
+                          <span className="info-value">{phase.waypoints}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="prediction-summary">
@@ -173,6 +220,71 @@ function TurbulencePrediction({ data }) {
             </p>
           </div>
         </div>
+
+         {/* Airport Weather Analysis Section */}
+         {data.airportWeather && data.airportWeather.departure && data.airportWeather.arrival && (
+           <div id="airport-weather" className="airport-weather-section">
+             <div className="section-header">
+               <h3>Departure & Arrival Weather</h3>
+               <span className="weather-badge">Ground Conditions</span>
+             </div>
+             <div className="airport-cards">
+               <div className="airport-card departure">
+                 <div className="airport-header">
+                   <h4>Departure: {data.airportWeather.departure.airport}</h4>
+                   <span className={`turbulence-badge ${data.airportWeather.departure.turbulence.toLowerCase().replace(/\s+/g, '-')}`}>
+                     {data.airportWeather.departure.turbulence}
+                   </span>
+                 </div>
+                 <div className="weather-details">
+                   <div className="weather-info">
+                     <span className="info-label">Wind:</span>
+                     <span className="info-value">{Math.round(data.airportWeather.departure.weather.windSpeed)} mph</span>
+                   </div>
+                   <div className="weather-info">
+                     <span className="info-label">Temperature:</span>
+                     <span className="info-value">{Math.round(data.airportWeather.departure.weather.temperature)}°F</span>
+                   </div>
+                   <div className="weather-info">
+                     <span className="info-label">Visibility:</span>
+                     <span className="info-value">{Math.round(data.airportWeather.departure.weather.visibility * 0.621371)} miles</span>
+                   </div>
+                   <div className="weather-info">
+                     <span className="info-label">Conditions:</span>
+                     <span className="info-value">{data.airportWeather.departure.weather.description.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
+                   </div>
+                 </div>
+               </div>
+               
+               <div className="airport-card arrival">
+                 <div className="airport-header">
+                   <h4>Arrival: {data.airportWeather.arrival.airport}</h4>
+                   <span className={`turbulence-badge ${data.airportWeather.arrival.turbulence.toLowerCase().replace(/\s+/g, '-')}`}>
+                     {data.airportWeather.arrival.turbulence}
+                   </span>
+                 </div>
+                 <div className="weather-details">
+                   <div className="weather-info">
+                     <span className="info-label">Wind:</span>
+                     <span className="info-value">{Math.round(data.airportWeather.arrival.weather.windSpeed)} mph</span>
+                   </div>
+                   <div className="weather-info">
+                     <span className="info-label">Temperature:</span>
+                     <span className="info-value">{Math.round(data.airportWeather.arrival.weather.temperature)}°F</span>
+                   </div>
+                   <div className="weather-info">
+                     <span className="info-label">Visibility:</span>
+                     <span className="info-value">{Math.round(data.airportWeather.arrival.weather.visibility * 0.621371)} miles</span>
+                   </div>
+                   <div className="weather-info">
+                     <span className="info-label">Conditions:</span>
+                     <span className="info-value">{data.airportWeather.arrival.weather.description.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
+                   </div>
+                 </div>
+               </div>
+             </div>
+           </div>
+         )}
 
          {/* AI Analysis Summary Section */}
          {data.aiSummary ? (
