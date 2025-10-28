@@ -474,9 +474,51 @@ class GAirmetService {
     }
   }
 
+  // Check if route passes through US airspace
+  static routePassesThroughUS(routeCoordinates) {
+    if (!routeCoordinates || routeCoordinates.length === 0) {
+      return false;
+    }
+    
+    // US airspace boundaries (approximate)
+    // Continental US: roughly 24.5°N to 49°N, 66°W to 125°W
+    // Alaska: roughly 51°N to 72°N, 130°W to 173°E
+    // Hawaii: roughly 18°N to 22°N, 154°W to 162°W
+    
+    const usBounds = [
+      // Continental US
+      { minLat: 24.5, maxLat: 49.0, minLng: -125.0, maxLng: -66.0 },
+      // Alaska
+      { minLat: 51.0, maxLat: 72.0, minLng: -173.0, maxLng: -130.0 },
+      // Hawaii
+      { minLat: 18.0, maxLat: 22.0, minLng: -162.0, maxLng: -154.0 }
+    ];
+    
+    // Check if any route coordinate falls within US airspace
+    return routeCoordinates.some(coord => {
+      if (!coord || coord.length < 2) return false;
+      
+      const [lat, lng] = coord;
+      
+      return usBounds.some(bound => {
+        return lat >= bound.minLat && lat <= bound.maxLat && 
+               lng >= bound.minLng && lng <= bound.maxLng;
+      });
+    });
+  }
+
   // Main method to get turbulence advisories for a route
   static async getTurbulenceAdvisories(departure, arrival, routeCoordinates) {
     try {
+      // First check if route passes through US airspace
+      // G-AIRMETs are only valid for US airspace
+      const passesThroughUS = this.routePassesThroughUS(routeCoordinates);
+      
+      if (!passesThroughUS) {
+        console.log(`Route ${departure}-${arrival} does not pass through US airspace, skipping G-AIRMET analysis`);
+        return { hasAdvisories: false, advisories: [] };
+      }
+      
       // Fetch G-AIRMET data for the last 6 hours
       const gairmets = await this.fetchGAirmets('all', 6);
       
@@ -523,6 +565,7 @@ class GAirmetService {
         severity: gairmet.severity || 'Moderate',
         hazard: gairmet.hazardType || 'Not specified',
         altitude: gairmet.altitude || { min: 0, max: 999999 },
+        coordinates: gairmet.coordinates || [], // Include polygon coordinates
         area: gairmet.area || 'Geographic area not specified',
         validTime: gairmet.validTime || new Date().toISOString(),
         source: 'AviationWeather.gov',

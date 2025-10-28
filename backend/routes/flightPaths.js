@@ -101,20 +101,31 @@ router.get('/route/:departure/:arrival', async (req, res) => {
 
     console.log(`API Request: ${departure} to ${arrival}`);
     
-    const route = await FlightPathService.getRouteByAirports(departure.toUpperCase(), arrival.toUpperCase());
-    
-    if (!route) {
-      return res.status(404).json({
+    try {
+      const route = await FlightPathService.getRouteByAirports(departure.toUpperCase(), arrival.toUpperCase());
+      
+      if (!route) {
+        console.log(`Route not found for ${departure} to ${arrival}`);
+        return res.status(404).json({
+          success: false,
+          error: 'Route not found'
+        });
+      }
+      
+      console.log(`Route generated successfully for ${departure} to ${arrival}`);
+      
+      res.json({
+        success: true,
+        data: route,
+        message: `Route generated from ${departure} to ${arrival}`
+      });
+    } catch (routeError) {
+      console.error(`Error generating route ${departure} to ${arrival}:`, routeError.message);
+      return res.status(500).json({
         success: false,
-        error: 'Route not found'
+        error: `Failed to generate route: ${routeError.message}`
       });
     }
-
-    res.json({
-      success: true,
-      data: route,
-      message: `Route generated from ${departure} to ${arrival}`
-    });
   } catch (error) {
     const { departure, arrival } = req.params;
     console.error(`Error generating route ${departure} to ${arrival}:`, error);
@@ -169,6 +180,37 @@ router.get('/airports', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch airports'
+    });
+  }
+});
+
+// Search airports by name, city, or IATA code
+router.get('/airports/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        error: 'Search query must be at least 2 characters'
+      });
+    }
+    
+    const AirportService = require('../services/airportService');
+    const airportService = new AirportService();
+    const results = await airportService.searchAirports(q.trim());
+    
+    res.json({
+      success: true,
+      data: results,
+      count: results.length,
+      query: q.trim()
+    });
+  } catch (error) {
+    console.error('Airport search error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to search airports'
     });
   }
 });

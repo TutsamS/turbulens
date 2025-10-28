@@ -263,6 +263,11 @@ class AirportService {
   // Search airports by name or city
   async searchAirports(query) {
     try {
+      // Ensure OurAirports data is loaded
+      if (!this.airportsData || Date.now() - this.lastFetch > this.dataFetchTimeout) {
+        await this.loadOurAirportsData();
+      }
+      
       // Use OurAirports data for search if available
       if (this.airportsData) {
         const results = this.airportsData
@@ -294,6 +299,35 @@ class AirportService {
     return commonAirports.filter(code => 
       code.toLowerCase().includes(query.toLowerCase())
     );
+  }
+
+  // Load OurAirports data
+  async loadOurAirportsData() {
+    try {
+      const url = 'https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat';
+      const response = await axios.get(url, { timeout: 10000 }); // 10 second timeout
+      this.airportsData = response.data.split('\n').map(line => {
+        const fields = line.split(',').map(field => field.replace(/"/g, ''));
+        return {
+          id: fields[0],
+          name: fields[1],
+          city: fields[2],
+          country: fields[3],
+          iata: fields[4],
+          icao: fields[5],
+          latitude: parseFloat(fields[6]),
+          longitude: parseFloat(fields[7]),
+          altitude: parseFloat(fields[8]),
+          timezone: fields[9],
+          source: 'OurAirports'
+        };
+      }).filter(airport => airport.iata && airport.iata !== '\\N'); // Filter out invalid entries
+      this.lastFetch = Date.now();
+      console.log(`Loaded ${this.airportsData.length} airports from OurAirports`);
+    } catch (error) {
+      console.error('Failed to load OurAirports data:', error.message);
+      this.airportsData = null;
+    }
   }
 
   // Clear cache

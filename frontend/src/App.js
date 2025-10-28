@@ -84,6 +84,7 @@ function App() {
         onAboutClick={handleAboutClick}
         scrollToSection={scrollToSection}
         predictionData={predictionData}
+        onAnalyzeAnother={openSearch}
       />
       <div className="container">
         <div className="main-content">

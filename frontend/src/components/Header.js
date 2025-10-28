@@ -1,7 +1,7 @@
 import React from 'react';
 import './Header.css';
 
-function Header({ onHomeClick, onAboutClick, scrollToSection, predictionData }) {
+function Header({ onHomeClick, onAboutClick, scrollToSection, predictionData, onAnalyzeAnother }) {
   return (
     <header className="header">
       <div className="container">
@@ -23,6 +23,11 @@ function Header({ onHomeClick, onAboutClick, scrollToSection, predictionData }) 
                 <button onClick={() => scrollToSection('recommendations')} className="nav-link">Recommendations</button>
                 <button onClick={() => scrollToSection('flightmap')} className="nav-link">Flight Map</button>
               </>
+            )}
+            {predictionData && onAnalyzeAnother && (
+              <button onClick={onAnalyzeAnother} className="analyze-another-btn">
+                Analyze Another Route
+              </button>
             )}
           </nav>
         </div>

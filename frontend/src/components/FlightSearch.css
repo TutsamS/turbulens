@@ -45,10 +45,17 @@
 
 .popup-header h2 {
   margin: 0;
-  color: #2d3748;
+  color: #ffffff;
   font-size: 24px;
   font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(29, 78, 216, 0.9) 100%);
+  padding: 12px 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+  text-align: center;
+  flex: 1;
+  margin-right: 16px;
 }
 
 .popup-close {
@@ -124,13 +131,6 @@
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 }
 
-.subtitle {
-  color: rgba(74, 85, 104, 0.9);
-  margin-top: 8px;
-  font-size: 16px;
-  line-height: 1.5;
-}
-
 /* IATA Help Styles */
 .iata-help {
   margin: 20px 0;
@@ -139,7 +139,107 @@
   border-radius: 12px;
   border: 1px solid rgba(16, 185, 129, 0.15);
   backdrop-filter: blur(10px);
+  text-align: left;
+}
+
+.search-tips {
+  margin: 12px 0;
+  padding-left: 20px;
+}
+
+.search-tips li {
+  margin: 8px 0;
+  color: #495057;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.airport-search-field {
+  width: 100%;
+}
+
+/* Popular Routes Section */
+.popular-routes-section {
+  margin: 24px 0;
+  padding: 20px;
+  background: rgba(74, 144, 226, 0.08);
+  border-radius: 12px;
+  border: 1px solid rgba(74, 144, 226, 0.15);
+  backdrop-filter: blur(10px);
+}
+
+.popular-routes-title {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d3748;
   text-align: center;
+}
+
+.popular-routes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.popular-route-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(74, 144, 226, 0.2);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  text-align: center;
+}
+
+.popular-route-btn:hover {
+  background: rgba(74, 144, 226, 0.1);
+  border-color: rgba(74, 144, 226, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.15);
+}
+
+.popular-route-btn:active {
+  transform: translateY(0);
+}
+
+.route-codes {
+  font-size: 16px;
+  font-weight: 700;
+  color: #4a90e2;
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.route-description {
+  font-size: 13px;
+  color: #718096;
+  font-weight: 500;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .popular-routes-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  
+  .popular-route-btn {
+    padding: 14px 10px;
+  }
+  
+  .route-codes {
+    font-size: 15px;
+  }
+  
+  .route-description {
+    font-size: 12px;
+  }
 }
 
 .iata-note {
