@@ -20,7 +20,6 @@ function Header({ onHomeClick, onAboutClick, scrollToSection, predictionData, on
               <>
                 <button onClick={() => scrollToSection('prediction')} className="nav-link">Prediction</button>
                 <button onClick={() => scrollToSection('gairmet')} className="nav-link">G-AIRMET Info</button>
-                <button onClick={() => scrollToSection('recommendations')} className="nav-link">Recommendations</button>
                 <button onClick={() => scrollToSection('flightmap')} className="nav-link">Flight Map</button>
               </>
             )}

@@ -2,196 +2,105 @@
 
 **Predict. Plan. Fly.**
 
-TurbuLens is an AI-powered flight turbulence prediction system that provides real-time weather analysis and turbulence forecasts for nervous flyers.
+TurbuLens is an AI-powered flight turbulence prediction system that analyzes real-time weather data and official aviation advisories to provide accurate, personalized turbulence forecasts for nervous flyers.
 
 ## Features
 
-- **AI-Powered Predictions**: Advanced machine learning algorithms for accurate turbulence forecasting
-- **Real-Time Weather Data**: Live weather information from global weather stations
-- **G-AIRMET Integration**: Official aviation weather advisories from AviationWeather.gov
-- **Global Coverage**: 7,000+ airports worldwide
-- **Interactive Maps**: Visual flight route mapping with weather waypoints
-- **Professional UI**: Modern glass-morphism design with responsive layout
-- **Free Service**: 100% free with no registration required
+- **AI-Powered Turbulence Predictions**: GPT-4o-mini analyzes weather data and aviation advisories
+- **Phase-Specific Forecasts**: Separate predictions for Climb, Cruise, and Descent
+- **Official Aviation Advisories**: Real-time G-AIRMET and SIGMET integration
+- **Personalized Explanations**: Route-specific weather analysis for your flight
+- **Interactive Route Maps**: Visual flight paths with weather data
+- **7,000+ Airports**: Global coverage with free access (no registration)
+
+## How It Works
+
+1. **Enter your flight route** (departure and arrival airports)
+2. **AI analyzes** real-time weather data and official aviation advisories (G-AIRMETs and SIGMETs)
+3. **Get predictions** for Climb, Cruise, Descent, and Overall turbulence
+4. **Read personalized explanation** of weather conditions affecting your specific route
+
+### Turbulence Levels
+
+- **Light**: Minor bumps, easy to walk around, drinks safe
+- **Light to Moderate**: Noticeable bumps, walking difficult, secure loose items
+- **Moderate**: Strong bumps, walking very difficult, seatbelt sign on
+- **Moderate to Severe**: Very rough, impossible to walk, items may fall
+- **Severe**: Violent turbulence, aircraft out of control momentarily (extremely rare)
 
 ## Quick Start
 
 ### Prerequisites
-
-**Option 1: Local Development**
-- Node.js (v16 or higher)
-- npm package manager
-- OpenWeatherMap API key
+- Docker Desktop (recommended) or Node.js v16+
+- OpenWeatherMap API key (free tier available)
 - OpenAI API key
-- Git
-
-**Option 2: Docker (Recommended)**
-- Docker Desktop (or Docker Engine + Docker Compose)
-- OpenWeatherMap API key
-- OpenAI API key
-- Git
-
-**Note**: This project uses npm exclusively. Please use `npm install` and `npm start` commands.
 
 ### Installation
 
-1. **Clone the repository**
+1. **Clone and configure**
    ```bash
    git clone https://github.com/TutsamS/turbulens
    cd turbulens
-   ```
-
-2. **Install backend dependencies**
-   ```bash
-   cd backend
-   npm install
-   ```
-
-3. **Install frontend dependencies**
-   ```bash
-   cd ../frontend
-   npm install
-   ```
-
-4. **Set up environment variables**
-   ```bash
-   cd ../backend
-   cp env.example .env
-   ```
-
-5. **Configure API keys** (see API Keys section below)
-
-6. **Start the backend server**
-   ```bash
-   cd backend
-   npm start
-   ```
-
-7. **Start the frontend development server**
-   ```bash
-   cd frontend
-   npm start
-   ```
-
-8. **Open your browser and paste this link**
-   - http://localhost:3000
-
-### Docker Installation (Recommended)
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/TutsamS/turbulens
-   cd turbulens
-   ```
-
-2. **Set up environment variables**
-   ```bash
    cp .env.example .env
    ```
 
-3. **Configure API keys in `.env` file** (see API Keys section below)
-   - Edit the `.env` file in the `turbulens` directory
-   - Add your `OPENWEATHER_API_KEY` and `AI_API_KEY`
+2. **Add your API keys to `.env` file**
+   ```
+   OPENWEATHER_API_KEY=your_key_here
+   AI_API_KEY=your_openai_key_here
+   ```
 
-4. **Start all services with Docker Compose**
+3. **Start with Docker (recommended)**
    ```bash
    docker-compose up --build
    ```
+   
+   **Or run locally**
+   ```bash
+   cd backend && npm install && npm start &
+   cd frontend && npm install && npm start
+   ```
 
-5. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5001
-   - Health check: http://localhost:5001/api/health
+4. **Open http://localhost:3000**
 
-**Note**: The Docker setup automatically handles:
-- Networking between frontend and backend containers
-- Environment variable injection
-- CORS configuration
-- Hot-reload for development
+## API Keys
 
-**To stop the containers:**
+Get your free API keys:
+- **OpenWeatherMap**: [openweathermap.org/api](https://openweathermap.org/api) (1000 calls/day free)
+- **OpenAI**: [platform.openai.com/api-keys](https://platform.openai.com/api-keys) (~$0.0001 per prediction)
+
+Add them to `.env`:
 ```bash
-docker-compose down
+OPENWEATHER_API_KEY=your_key_here
+AI_API_KEY=your_openai_key_here
 ```
 
-**To view logs:**
-```bash
-docker-compose logs backend
-docker-compose logs frontend
-```
-
-**Important**: When using Docker, you don't need to run the backend/frontend locally. Running both Docker and local services simultaneously will cause port conflicts.
-
-## Required API Keys
-
-### OpenWeatherMap API
-- **Purpose**: Real-time weather data for flight routes
-- **Get Key**: [OpenWeatherMap API](https://openweathermap.org/api)
-- **Cost**: Free tier available (1000 calls/day)
-- **Setup**: 
-  1. Sign up at OpenWeatherMap
-  2. Get your API key
-  3. Add to `.env` file: `OPENWEATHER_API_KEY=your_key_here`
-  4. Also add your key to line 32 and line 283 in FlightMap.js for frontend weather map capabilities.
-
-### OpenAI API
-- **Purpose**: AI-powered turbulence analysis and predictions
-- **Get Key**: [OpenAI API](https://platform.openai.com/api-keys)
-- **Cost**: Pay-per-use
-- **Setup**: 
-  1. Sign up at OpenAI
-  2. Get your API key
-  3. Add to `.env` file: `AI_API_KEY=your_key_here`
-
-### Environment Variables (.env)
-
-**For Local Development:**
-```bash
-# backend/.env file
-PORT=5000
-OPENWEATHER_API_KEY=your_openweather_api_key_here
-AI_API_KEY=your_openai_api_key_here
-```
-
-**For Docker:**
-```bash
-# turbulens/.env file (used by docker-compose.yml)
-OPENWEATHER_API_KEY=your_openweather_api_key_here
-AI_API_KEY=your_openai_api_key_here
-```
-
-**Note**: The backend uses `AI_API_KEY` (not `OPENAI_API_KEY`). This must be set in your `.env` file.
+**Note**: Also add your OpenWeatherMap key to `FlightMap.js` (lines 32 and 283) for weather map layers.
 
 ## Troubleshooting
 
-### Common Issues
+**Docker issues:**
+```bash
+docker-compose down && docker-compose up --build
+docker-compose logs backend
+```
 
-**Backend won't start:**
-- Check if port 5000 (local) or 5001 (Docker) is available
-- Verify `.env` file exists and has correct API keys
-- Ensure all dependencies are installed
-- For Docker: Check `docker-compose logs backend` for errors
+**Port conflicts:** Stop services on ports 3000 and 5001
 
-**Frontend won't start:**
-- Check if port 3000 is available
-- Verify all dependencies are installed
-- For Docker: Check `docker-compose logs frontend` for errors
+**API errors:** Check that `.env` has valid API keys (use `AI_API_KEY`, not `OPENAI_API_KEY`)
 
-**API calls failing:**
-- Verify API keys are correct (use `AI_API_KEY`, not `OPENAI_API_KEY`)
-- Check API rate limits
-- Ensure backend server is running
-- For Docker: Verify containers are running with `docker-compose ps`
+**Predictions:** G-AIRMETs are forecasts (~65% accuracy), not certainties. System errs on the side of caution.
 
-**Docker-specific issues:**
-- **Port already in use**: Stop any local services running on ports 3000 or 5001
-- **Environment variables not loading**: Ensure `.env` file is in the `turbulens` directory (where `docker-compose.yml` is located)
-- **405 Method Not Allowed errors**: Rebuild containers with `docker-compose up --build`
-- **CORS errors**: Backend is configured to allow requests from the frontend container automatically
+## Technical Stack
+
+**Backend:** Node.js + Express  
+**Frontend:** React + Leaflet maps  
+**AI:** OpenAI GPT-4o-mini  
+**Data:** OpenWeatherMap + AviationWeather.gov (G-AIRMETs/SIGMETs)
 
 ## Mission
 
-We're committed to making air travel less stressful for everyone. By providing free, accurate turbulence predictions, we hope to help nervous flyers feel more confident and prepared for their journeys.
+We're committed to making air travel less stressful for everyone. By providing free, accurate turbulence predictions with transparent methodology, we hope to help nervous flyers feel more confident and prepared for their journeys.
 
 **"Empowering nervous flyers with free, reliable information to make every flight a smoother experience."**
 

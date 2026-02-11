@@ -1,10 +1,387 @@
 const axios = require('axios');
 const GAirmetService = require('./gAirmetService');
+const WeatherAdvisoryService = require('./weatherAdvisoryService');
 const AirportService = require('./airportService');
+
+/**
+ * ============================================================================
+ * ALTITUDE FORMAT STANDARD ACROSS THE APPLICATION
+ * ============================================================================
+ * 
+ * INPUT (from external APIs):
+ * - G-AIRMET API: Returns flight levels (FL180 = 180, FL240 = 240)
+ * - SIGMET API: Returns "FL180" in text or "18000 ft" in attributes
+ * 
+ * PARSING (in service layer):
+ * - gAirmetService.js: Converts all FL values to feet (180 * 100 = 18,000)
+ * - weatherAdvisoryService.js: Converts all FL values to feet (240 * 100 = 24,000)
+ * 
+ * INTERNAL STORAGE & PROCESSING:
+ * - ALL altitudes stored in FEET (18000, 24000, 35000)
+ * - Phase altitude ranges: in FEET
+ * - Advisory altitudes: in FEET
+ * - Weather data altitudes: in FEET
+ * 
+ * COMPARISON (in analysis functions):
+ * - ALL altitude comparisons use FEET consistently
+ * - No conversion needed during comparison operations
+ * 
+ * OUTPUT (display to frontend/logs):
+ * - Convert back to FL for readability: 18000 / 100 = "FL180"
+ * - Or display with commas: "18,000 ft"
+ * 
+ * This ensures consistency and prevents altitude comparison bugs.
+ * ============================================================================
+ */
 
 class SimpleRouteService {
   // Initialize airport service
   static airportService = new AirportService();
+
+  // ============================================================================
+  // PHASE 1 ENHANCEMENTS: Advanced Turbulence Prediction
+  // ============================================================================
+
+  /**
+   * Normalize altitude to feet format
+   * Detects if altitude might be in flight levels and converts accordingly
+   * @param {Object} altitude - Altitude object with min/max
+   * @returns {Object} Normalized altitude in feet
+   */
+  static normalizeAltitudeToFeet(altitude) {
+    if (!altitude) return { min: 0, max: 999999 };
+    
+    let { min, max } = altitude;
+    
+    // Safety check: If altitude values look like flight levels (< 1000), convert to feet
+    if (min > 0 && min < 1000 && max < 1000) {
+      return { min: min * 100, max: max * 100 };
+    }
+    
+    return { min, max };
+  }
+
+  /**
+   * Calculate vertical wind shear between altitude levels
+   * Wind shear is THE primary cause of turbulence, not wind speed
+   * @param {number} windSpeed1 - Wind speed at altitude 1 (knots)
+   * @param {number} windSpeed2 - Wind speed at altitude 2 (knots)
+   * @param {number} altitudeDiff - Altitude difference (feet)
+   * @returns {number} Wind shear in knots per 1000 feet
+   */
+  static calculateVerticalWindShear(windSpeed1, windSpeed2, altitudeDiff) {
+    if (!altitudeDiff || altitudeDiff === 0) return 0;
+    
+    const windSpeedDiff = Math.abs(windSpeed2 - windSpeed1);
+    const shear = (windSpeedDiff / altitudeDiff) * 1000; // Normalize to per 1000ft
+    
+    return shear;
+  }
+
+  /**
+   * Calculate horizontal wind shear between waypoints
+   * @param {object} weather1 - Weather data at point 1
+   * @param {object} weather2 - Weather data at point 2
+   * @param {number} distance - Distance between points (miles)
+   * @returns {number} Horizontal wind shear (knots per 100 miles)
+   */
+  static calculateHorizontalWindShear(weather1, weather2, distance) {
+    if (!weather1 || !weather2 || !distance || distance === 0) return 0;
+    
+    const windSpeed1 = weather1.windSpeed || 0;
+    const windSpeed2 = weather2.windSpeed || 0;
+    const windDir1 = weather1.windDirection || 0;
+    const windDir2 = weather2.windDirection || 0;
+    
+    // Calculate vector components
+    const u1 = windSpeed1 * Math.cos(windDir1 * Math.PI / 180);
+    const v1 = windSpeed1 * Math.sin(windDir1 * Math.PI / 180);
+    const u2 = windSpeed2 * Math.cos(windDir2 * Math.PI / 180);
+    const v2 = windSpeed2 * Math.sin(windDir2 * Math.PI / 180);
+    
+    // Calculate magnitude of wind vector difference
+    const du = u2 - u1;
+    const dv = v2 - v1;
+    const vectorDiff = Math.sqrt(du * du + dv * dv);
+    
+    // Normalize to per 100 miles
+    const shear = (vectorDiff / distance) * 100;
+    
+    return shear;
+  }
+
+  /**
+   * Assess turbulence based on wind shear (more accurate than wind speed alone)
+   * @param {number} verticalShear - Vertical wind shear (knots/1000ft)
+   * @param {number} horizontalShear - Horizontal wind shear (knots/100mi)
+   * @returns {string} Turbulence level based on shear
+   */
+  static assessWindShearTurbulence(verticalShear, horizontalShear) {
+    // Vertical shear thresholds (primary indicator)
+    // Based on aviation meteorology standards
+    if (verticalShear > 12) return 'Severe';           // >12 kt/1000ft
+    if (verticalShear > 8) return 'Moderate to Severe'; // 8-12 kt/1000ft
+    if (verticalShear > 5) return 'Moderate';           // 5-8 kt/1000ft
+    if (verticalShear > 3) return 'Light to Moderate';  // 3-5 kt/1000ft
+    
+    // Horizontal shear thresholds (secondary indicator)
+    if (horizontalShear > 20) return 'Moderate';        // Significant horizontal shear
+    if (horizontalShear > 10) return 'Light to Moderate';
+    
+    return 'Light';
+  }
+
+  /**
+   * Parse cloud types from weather description to identify turbulence indicators
+   * @param {string} description - Weather description from API
+   * @returns {object} Cloud analysis with turbulence risk
+   */
+  static parseCloudTypes(description) {
+    if (!description) return { hasTurbulentClouds: false, severity: 'None', types: [] };
+    
+    const desc = description.toUpperCase();
+    const turbulentTypes = [];
+    let maxSeverity = 'None';
+    
+    // Critical turbulence indicators
+    if (desc.includes('CUMULONIMBUS') || desc.includes(' CB ') || desc.includes('THUNDERSTORM')) {
+      turbulentTypes.push('Cumulonimbus');
+      maxSeverity = 'Severe'; // CB = Severe turbulence
+    }
+    
+    if (desc.includes('TOWERING CUMULUS') || desc.includes(' TCU ')) {
+      turbulentTypes.push('Towering Cumulus');
+      if (maxSeverity !== 'Severe') maxSeverity = 'Moderate to Severe';
+    }
+    
+    if (desc.includes('ALTOCUMULUS CASTELLANUS') || desc.includes('CASTELLANUS')) {
+      turbulentTypes.push('Altocumulus Castellanus');
+      if (!maxSeverity || maxSeverity === 'None') maxSeverity = 'Moderate'; // CAT indicator
+    }
+    
+    if (desc.includes('CONVECTIVE') || desc.includes('UNSTABLE')) {
+      turbulentTypes.push('Convective Activity');
+      if (!maxSeverity || maxSeverity === 'None' || maxSeverity === 'Light') {
+        maxSeverity = 'Moderate';
+      }
+    }
+    
+    // Moderate turbulence indicators
+    if (desc.includes('CUMULUS') && !desc.includes('CUMULONIMBUS')) {
+      turbulentTypes.push('Cumulus');
+      if (!maxSeverity || maxSeverity === 'None') maxSeverity = 'Light to Moderate';
+    }
+    
+    return {
+      hasTurbulentClouds: turbulentTypes.length > 0,
+      severity: maxSeverity,
+      types: turbulentTypes,
+      description: description
+    };
+  }
+
+  /**
+   * Calculate temperature gradient (lapse rate) between waypoints
+   * Large temperature changes indicate frontal systems or atmospheric instability
+   * @param {number} temp1 - Temperature at point 1 (Celsius)
+   * @param {number} temp2 - Temperature at point 2 (Celsius)
+   * @param {number} distance - Distance between points (miles)
+   * @returns {number} Temperature gradient (°C per 100 miles)
+   */
+  static calculateTemperatureGradient(temp1, temp2, distance) {
+    if (!distance || distance === 0) return 0;
+    
+    const tempDiff = Math.abs(temp2 - temp1);
+    const gradient = (tempDiff / distance) * 100; // Per 100 miles
+    
+    return gradient;
+  }
+
+  /**
+   * Assess turbulence from temperature gradient
+   * @param {number} gradient - Temperature gradient (°C/100mi)
+   * @returns {string} Turbulence contribution from temperature changes
+   */
+  static assessTemperatureGradientTurbulence(gradient) {
+    // Large temperature changes indicate frontal systems
+    if (gradient > 10) return 'Moderate';  // Strong frontal system
+    if (gradient > 5) return 'Light to Moderate';  // Moderate front
+    if (gradient > 3) return 'Light';      // Weak front
+    return 'None';
+  }
+
+  /**
+   * Calculate turbulence using Phase 1 enhancements (wind shear, clouds, temp gradients)
+   * @param {array} weatherData - Weather data points
+   * @param {object} phase - Flight phase info (optional)
+   * @param {object} weatherAdvisories - Advisory data (optional)
+   * @returns {string} Turbulence level
+   */
+  static calculateTurbulenceWithPhase1(weatherData, phase = null, weatherAdvisories = null) {
+    if (!weatherData || weatherData.length === 0) return 'Light';
+    
+    const turbulenceLevels = [];
+    
+    for (let i = 0; i < weatherData.length; i++) {
+      const current = weatherData[i];
+      let levelAtPoint = 'Light';
+      
+      // Get weather from correct structure
+      const weather = current.weather || current.baseWeather || current;
+      if (!weather) continue;
+      
+      // Factor 1: Cloud types
+      if (weather.description) {
+        const cloudAnalysis = this.parseCloudTypes(weather.description);
+        if (cloudAnalysis.hasTurbulentClouds) {
+          levelAtPoint = cloudAnalysis.severity;
+        }
+      }
+      
+      // Factor 2: Horizontal wind shear (between points)
+      if (i > 0 && weatherData[i-1]) {
+        const prevWeather = weatherData[i-1].weather || weatherData[i-1].baseWeather || weatherData[i-1];
+        const distance = this.calculateDistance(
+          weatherData[i-1].coordinates[0], weatherData[i-1].coordinates[1],
+          current.coordinates[0], current.coordinates[1]
+        );
+        
+        if (distance > 0 && prevWeather.windSpeed && weather.windSpeed) {
+          const horizShear = this.calculateHorizontalWindShear(prevWeather, weather, distance);
+          const shearLevel = this.assessWindShearTurbulence(0, horizShear);
+          
+          if (this.getSeverityValue(shearLevel) > this.getSeverityValue(levelAtPoint)) {
+            levelAtPoint = shearLevel;
+          }
+        }
+      }
+      
+      turbulenceLevels.push(levelAtPoint);
+    }
+    
+    // Find most common level
+    if (turbulenceLevels.length === 0) return 'Light';
+    
+    const counts = {};
+    turbulenceLevels.forEach(level => {
+      counts[level] = (counts[level] || 0) + 1;
+    });
+    
+    let mostCommon = 'Light';
+    let maxCount = 0;
+    Object.entries(counts).forEach(([level, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommon = level;
+      }
+    });
+    
+    return mostCommon;
+  }
+
+  /**
+   * Fetch PIREPs (Pilot Reports) for a route
+   * These are REAL turbulence reports from actual flights - most reliable source!
+   * @param {array} routeCoordinates - Route waypoints [[lat, lon], ...]
+   * @returns {Promise<object>} PIREP data with turbulence reports
+   */
+  static async getPirepsForRoute(routeCoordinates) {
+    try {
+      const response = await axios.get('https://aviationweather.gov/api/data/pirep', {
+        params: { 
+          format: 'json'
+          // Note: age parameter causes 400 error, fetch all recent PIREPs
+        },
+        timeout: 8000,
+        headers: {
+          'User-Agent': 'Turbulens-App/1.0'
+        }
+      });
+
+      if (response.status === 204 || !response.data || response.data.length === 0) {
+        console.log('[PIREP] No recent pilot reports available');
+        return { hasPireps: false, turbulenceReports: [] };
+      }
+
+      // Filter PIREPs for turbulence and proximity to route
+      const turbulencePireps = response.data.filter(pirep => {
+        // Must have turbulence data
+        if (!pirep.turbulence || !pirep.turbulenceIntensity) return false;
+        
+        // Must have coordinates
+        if (!pirep.lat || !pirep.lon) return false;
+        
+        // Check if PIREP is near the route (within 100 miles)
+        return routeCoordinates.some(waypoint => {
+          const distance = this.calculateDistance(
+            pirep.lat, pirep.lon,
+            waypoint[0], waypoint[1]
+          );
+          return distance < 100; // Within 100 miles of route
+        });
+      });
+
+      console.log(`[PIREP] Found ${turbulencePireps.length} turbulence reports near route`);
+
+      // Parse and categorize PIREPs
+      const turbulenceReports = turbulencePireps.map(pirep => {
+        const intensity = (pirep.turbulenceIntensity || '').toUpperCase();
+        
+        // Map PIREP intensity to our severity levels
+        let severity = 'Light';
+        if (intensity.includes('SEV') || intensity.includes('EXTREME')) {
+          severity = 'Severe';
+        } else if (intensity.includes('MOD')) {
+          severity = 'Moderate';
+        } else if (intensity.includes('LGT') || intensity.includes('LIGHT')) {
+          severity = 'Light';
+        }
+        
+        return {
+          severity: severity,
+          altitude: pirep.altitude || pirep.altitudeFt || null,
+          location: { lat: pirep.lat, lon: pirep.lon },
+          time: pirep.observationTime || pirep.time,
+          aircraftType: pirep.aircraftType || 'Unknown',
+          raw: pirep.rawPirep || '',
+          type: pirep.turbulenceType || 'Unknown'
+        };
+      });
+
+      return {
+        hasPireps: turbulenceReports.length > 0,
+        turbulenceReports: turbulenceReports,
+        mostSevere: this.getMostSeverePirep(turbulenceReports)
+      };
+
+    } catch (error) {
+      if (error.response?.status === 204) {
+        console.log('[PIREP] No recent pilot reports (status 204)');
+        return { hasPireps: false, turbulenceReports: [] };
+      }
+      console.warn('[PIREP] Failed to fetch:', error.message);
+      return { hasPireps: false, turbulenceReports: [], error: error.message };
+    }
+  }
+
+  /**
+   * Get the most severe PIREP from a list
+   * @param {array} pireps - Array of PIREP objects
+   * @returns {object|null} Most severe PIREP
+   */
+  static getMostSeverePirep(pireps) {
+    if (!pireps || pireps.length === 0) return null;
+    
+    return pireps.reduce((most, current) => {
+      if (!most) return current;
+      return this.getSeverityValue(current.severity) > this.getSeverityValue(most.severity) 
+        ? current : most;
+    }, null);
+  }
+
+  // ============================================================================
+  // END PHASE 1 ENHANCEMENTS
+  // ============================================================================
 
   // Generate great circle path between two airports
   static generateGreatCirclePath(lat1, lng1, lat2, lng2, numPoints = 15) {
@@ -258,23 +635,194 @@ class SimpleRouteService {
     return weatherData;
   }
 
-  // Calculate turbulence based on weather data and G-AIRMET advisories
-  static calculateTurbulence(weatherData, gairmetAdvisories = null) {
+  // Helper: Extract advisories from either old (gairmetAdvisories) or new (weatherAdvisories) format
+  static getAdvisoriesFromFormat(advisories) {
+    if (!advisories) return { hasAdvisories: false, advisories: [] };
+    
+    // New format (weatherAdvisories with combined structure)
+    if (advisories.combinedAdvisories || (advisories.gairmets && advisories.sigmets)) {
+      return {
+        hasAdvisories: advisories.hasAdvisories || false,
+        advisories: advisories.advisories || [],
+        gairmets: advisories.gairmets || { hasAdvisories: false, advisories: [] },
+        sigmets: advisories.sigmets || { hasAdvisories: false, advisories: [] }
+      };
+    }
+    
+    // Old format (gairmetAdvisories)
+    return advisories;
+  }
+
+  // Helper: Analyze combined advisories with SIGMET priority
+  static analyzeCombinedAdvisoryImpact(weatherAdvisories, weatherData) {
+    const advisoryData = this.getAdvisoriesFromFormat(weatherAdvisories);
+    
+    if (!advisoryData.hasAdvisories || !advisoryData.advisories || advisoryData.advisories.length === 0) {
+      return { shouldUpgrade: false, shouldDowngrade: false, recommendedLevel: null, totalWeight: 0 };
+    }
+
+    // Separate SIGMETs and G-AIRMETs
+    const sigmets = advisoryData.advisories.filter(a => a.type === 'SIGMET');
+    const gairmets = advisoryData.advisories.filter(a => a.type === 'G-AIRMET');
+
+    let highestSeverity = null;
+    let maxWeight = 0;
+    let totalWeight = 0;
+
+    // SIGMETs have priority - check them first
+    if (sigmets.length > 0) {
+      const sigmetAnalysis = this.analyzeAdvisoriesImpact(sigmets, weatherData, true);
+      if (sigmetAnalysis.recommendedLevel && (sigmetAnalysis.totalWeight || 0) > maxWeight) {
+        highestSeverity = sigmetAnalysis.recommendedLevel;
+        maxWeight = sigmetAnalysis.totalWeight || 0;
+      }
+      totalWeight += sigmetAnalysis.totalWeight || 0;
+    }
+
+    // Then check G-AIRMETs if no SIGMET or if they suggest higher severity
+    if (gairmets.length > 0) {
+      const gairmetAnalysis = this.analyzeGAirmetImpact(gairmets, weatherData);
+      const gairmetWeight = gairmetAnalysis.totalWeight || (gairmets.length * 1.0);
+      
+      // Only consider G-AIRMET if it's higher severity than SIGMET
+      const gairmetSeverityValue = this.getSeverityValue(gairmetAnalysis.recommendedLevel);
+      const currentSeverityValue = highestSeverity ? this.getSeverityValue(highestSeverity) : 0;
+      
+      if (gairmetSeverityValue > currentSeverityValue || !highestSeverity) {
+        highestSeverity = gairmetAnalysis.recommendedLevel;
+        maxWeight = Math.max(maxWeight, gairmetWeight);
+      }
+      totalWeight += gairmetWeight;
+    }
+
+    return {
+      shouldUpgrade: !!highestSeverity,
+      shouldDowngrade: false,
+      recommendedLevel: highestSeverity || 'Moderate',
+      totalWeight: totalWeight,
+      hasSigmets: sigmets.length > 0,
+      hasGairmets: gairmets.length > 0
+    };
+  }
+
+  // Helper: Analyze advisories impact (works for both SIGMETs and G-AIRMETs)
+  static analyzeAdvisoriesImpact(advisories, weatherData, isSigmets = false) {
+    if (!advisories || advisories.length === 0) {
+      return { shouldUpgrade: false, recommendedLevel: null, totalWeight: 0 };
+    }
+
+    let totalWeight = 0;
+    const severityCounts = { Severe: 0, Moderate: 0, Light: 0 };
+
+    advisories.forEach(advisory => {
+      const weight = advisory.weight || (isSigmets ? 2.0 : 1.0);
+      totalWeight += weight;
+      
+      const severity = advisory.severity || 'Moderate';
+      severityCounts[severity] = (severityCounts[severity] || 0) + weight;
+    });
+
+    // Determine recommended level based on weighted severity
+    let recommendedLevel = 'Moderate';
+    if (severityCounts.Severe > severityCounts.Moderate && severityCounts.Severe > severityCounts.Light) {
+      recommendedLevel = 'Severe';
+    } else if (severityCounts.Moderate > severityCounts.Light) {
+      recommendedLevel = 'Moderate';
+    } else {
+      recommendedLevel = 'Light';
+    }
+
+    return {
+      shouldUpgrade: true,
+      recommendedLevel: recommendedLevel,
+      totalWeight: totalWeight
+    };
+  }
+
+  // Calculate turbulence based on weather data and weather advisories (G-AIRMETs + SIGMETs)
+  // PHASE 1 ENHANCED: Now uses wind shear, cloud types, and temperature gradients
+  static calculateTurbulence(weatherData, weatherAdvisories = null) {
     if (!weatherData || weatherData.length === 0) return 'Unknown';
     
     const validWeather = weatherData.filter(w => w.weather && w.weather.windSpeed != null);
     if (validWeather.length === 0) return 'Unknown';
     
-    // Calculate turbulence for each waypoint using high-altitude thresholds
-    // At 30,000+ feet, wind speeds are much higher and normal cruising conditions
-    const turbulenceLevels = validWeather.map(w => {
-      const windSpeed = w.weather.windSpeed;
-      if (windSpeed < 50) return 'Light';
-      if (windSpeed < 80) return 'Light to Moderate';
-      if (windSpeed < 120) return 'Moderate';
-      if (windSpeed < 150) return 'Moderate to Severe';
-      return 'Severe';
-    });
+    // PHASE 1: Calculate turbulence using WIND SHEAR (not just wind speed!)
+    const turbulenceLevels = [];
+    const turbulenceFactors = []; // Track what's causing turbulence
+    
+    for (let i = 0; i < validWeather.length; i++) {
+      const current = validWeather[i];
+      let levelAtPoint = 'Light'; // Default
+      const factors = [];
+      
+      // Factor 1: CLOUD TYPE ANALYSIS (Critical!)
+      if (current.weather.description) {
+        const cloudAnalysis = this.parseCloudTypes(current.weather.description);
+        if (cloudAnalysis.hasTurbulentClouds) {
+          levelAtPoint = cloudAnalysis.severity;
+          factors.push(`Clouds: ${cloudAnalysis.types.join(', ')}`);
+        }
+      }
+      
+      // Factor 2: HORIZONTAL WIND SHEAR (between waypoints)
+      if (i > 0) {
+        const previous = validWeather[i - 1];
+        const distance = this.calculateDistance(
+          previous.coordinates[0], previous.coordinates[1],
+          current.coordinates[0], current.coordinates[1]
+        );
+        
+        if (distance > 0) {
+          const horizShear = this.calculateHorizontalWindShear(
+            previous.weather, current.weather, distance
+          );
+          const shearLevel = this.assessWindShearTurbulence(0, horizShear);
+          
+          if (this.getSeverityValue(shearLevel) > this.getSeverityValue(levelAtPoint)) {
+            levelAtPoint = shearLevel;
+            factors.push(`Horizontal wind shear: ${horizShear.toFixed(1)} kt/100mi`);
+          }
+        }
+        
+        // Factor 3: TEMPERATURE GRADIENT (frontal systems)
+        if (previous.weather.temperature && current.weather.temperature && distance > 0) {
+          const tempGradient = this.calculateTemperatureGradient(
+            previous.weather.temperature,
+            current.weather.temperature,
+            distance
+          );
+          const tempLevel = this.assessTemperatureGradientTurbulence(tempGradient);
+          
+          if (tempLevel !== 'None' && 
+              this.getSeverityValue(tempLevel) > this.getSeverityValue(levelAtPoint)) {
+            levelAtPoint = tempLevel;
+            factors.push(`Temperature gradient: ${tempGradient.toFixed(1)}°C/100mi`);
+          }
+        }
+      }
+      
+      // Factor 4: High wind speed as secondary indicator (jet streams can be smooth)
+      // Only upgrade if no other factors have triggered
+      if (levelAtPoint === 'Light') {
+        const windSpeed = current.weather.windSpeed;
+        if (windSpeed > 150) {
+          levelAtPoint = 'Light to Moderate'; // High winds alone = minor turbulence
+          factors.push(`High winds: ${windSpeed} knots`);
+        }
+      }
+      
+      turbulenceLevels.push(levelAtPoint);
+      if (factors.length > 0) {
+        turbulenceFactors.push({ point: i, level: levelAtPoint, factors });
+      }
+    }
+    
+    // Log what factors are causing turbulence (for debugging)
+    if (turbulenceFactors.length > 0) {
+      console.log('[Phase 1] Turbulence factors detected:', 
+        turbulenceFactors.slice(0, 3).map(f => `${f.level}: ${f.factors[0]}`).join('; '));
+    }
     
     // Count occurrences
     const turbulenceCounts = {};
@@ -309,36 +857,41 @@ class SimpleRouteService {
       finalLevel = 'Moderate';
     }
     
-    // Enhance with G-AIRMET data if available
-    if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
-      // Get comprehensive G-AIRMET analysis
-      const gairmetAnalysis = this.analyzeGAirmetImpact(gairmetAdvisories.advisories, weatherData);
+    // Enhance with weather advisory data if available (G-AIRMETs + SIGMETs)
+    if (weatherAdvisories) {
+      const advisoryAnalysis = this.analyzeCombinedAdvisoryImpact(weatherAdvisories, weatherData);
       
-      // Determine if we should adjust based on G-AIRMET vs weather-based prediction
-      const currentLevelValue = this.getSeverityValue(finalLevel);
-      const gairmetLevelValue = this.getSeverityValue(gairmetAnalysis.recommendedLevel);
-      
-      // Special handling: Always upgrade from "Light" if G-AIRMET suggests higher
-      if (finalLevel === 'Light' && gairmetLevelValue > currentLevelValue) {
-        finalLevel = gairmetAnalysis.recommendedLevel;
-      }
-      // Special handling: Always upgrade from "Light to Moderate" if G-AIRMET suggests "Moderate" or higher
-      else if (finalLevel === 'Light to Moderate' && gairmetLevelValue >= this.getSeverityValue('Moderate')) {
-        finalLevel = gairmetAnalysis.recommendedLevel;
-      }
-      // For other cases, use a lower threshold to be more sensitive to G-AIRMET
-      else if (gairmetLevelValue > currentLevelValue + 0.2) { // Reduced from 0.5 to 0.2
-        finalLevel = gairmetAnalysis.recommendedLevel;
-      } else if (gairmetLevelValue < currentLevelValue - 0.8) { // Only downgrade with significant difference
-        finalLevel = gairmetAnalysis.recommendedLevel;
+      if (advisoryAnalysis.shouldUpgrade && advisoryAnalysis.recommendedLevel) {
+        const currentLevelValue = this.getSeverityValue(finalLevel);
+        const advisoryLevelValue = this.getSeverityValue(advisoryAnalysis.recommendedLevel);
+        
+        // SIGMETs have stronger influence
+        const upgradeThreshold = advisoryAnalysis.hasSigmets ? 0.0 : 0.2;
+        
+        // Special handling: Always upgrade from "Light" if advisory suggests higher
+        if (finalLevel === 'Light' && advisoryLevelValue > currentLevelValue) {
+          finalLevel = advisoryAnalysis.recommendedLevel;
+        }
+        // Special handling: Always upgrade from "Light to Moderate" if advisory suggests "Moderate" or higher
+        else if (finalLevel === 'Light to Moderate' && advisoryLevelValue >= this.getSeverityValue('Moderate')) {
+          finalLevel = advisoryAnalysis.recommendedLevel;
+        }
+        // SIGMETs: Always upgrade (they're immediate/urgent)
+        else if (advisoryAnalysis.hasSigmets && advisoryLevelValue > currentLevelValue) {
+          finalLevel = advisoryAnalysis.recommendedLevel;
+        }
+        // G-AIRMETs: Use threshold
+        else if (advisoryLevelValue > currentLevelValue + upgradeThreshold) {
+          finalLevel = advisoryAnalysis.recommendedLevel;
+        }
       }
     }
     
     return finalLevel;
   }
 
-  // Phase-specific turbulence calculation
-  static calculatePhaseTurbulence(phase, multiAltitudeWeather, gairmetAdvisories) {
+  // Phase-specific turbulence calculation (PHASE 1 ENHANCED)
+  static calculatePhaseTurbulence(phase, multiAltitudeWeather, weatherAdvisories) {
     // Filter weather data for this phase's waypoints
     const phaseWeather = multiAltitudeWeather.filter(w => {
       if (!w || !w.coordinates) return false;
@@ -349,7 +902,31 @@ class SimpleRouteService {
       });
     });
     
-    if (phaseWeather.length === 0) return 'Unknown';
+    // PHASE 1 FIX: If no weather data, use simpler fallback with phase waypoints
+    if (phaseWeather.length === 0) {
+      console.log(`[Phase 1] No weather data for ${phase.name}, using waypoint-based estimation`);
+      // Try to calculate from phase waypoints directly if we have weather data anywhere
+      if (multiAltitudeWeather.length > 0) {
+        // Use closest weather points
+        const closestWeather = phase.waypoints.map(wp => {
+          const closest = multiAltitudeWeather.reduce((best, current) => {
+            if (!current.coordinates) return best;
+            const dist = Math.sqrt(
+              Math.pow(wp[0] - current.coordinates[0], 2) +
+              Math.pow(wp[1] - current.coordinates[1], 2)
+            );
+            return !best || dist < best.distance ? { weather: current, distance: dist } : best;
+          }, null);
+          return closest ? closest.weather : null;
+        }).filter(Boolean);
+        
+        if (closestWeather.length > 0) {
+          // Use Phase 1 enhanced calculation on closest weather
+          return this.calculateTurbulenceWithPhase1(closestWeather, phase, weatherAdvisories);
+        }
+      }
+      return 'Light'; // Safe default instead of Unknown
+    }
     
     // Determine appropriate altitudes for this phase
     let relevantAltitudes;
@@ -365,65 +942,49 @@ class SimpleRouteService {
       relevantAltitudes = [35000]; // Default to cruise
     }
     
-    // Calculate turbulence levels for this phase across multiple altitudes
+    // PHASE 1 ENHANCED: Use cloud types, wind shear, and temperature gradients
+    // Calculate turbulence using Phase 1 methods instead of just wind speed
+    const phaseTurbulenceLevel = this.calculateTurbulenceWithPhase1(phaseWeather, phase, weatherAdvisories);
+    
+    // If Phase 1 gave us a level, use it directly
+    if (phaseTurbulenceLevel && phaseTurbulenceLevel !== 'Light') {
+      console.log(`[Phase 1] ${phase.name}: ${phaseTurbulenceLevel} (cloud types + wind shear analysis)`);
+      return phaseTurbulenceLevel;
+    }
+    
+    // Otherwise, continue with multi-altitude analysis as backup
     const allTurbulenceLevels = [];
     
     // For each relevant altitude, calculate turbulence
     relevantAltitudes.forEach(altitude => {
       const altitudeTurbulenceLevels = phaseWeather.map(w => {
-        let windSpeed = 0;
-        let windSource = 'none';
+        let levelAtPoint = 'Light';
         
-        // Try to get wind speed at this specific altitude
-        if (w.altitudeWeather && w.altitudeWeather[altitude]) {
-          windSpeed = w.altitudeWeather[altitude].windSpeed;
-          windSource = 'altitudeWeather';
-        } else if (w.baseWeather) {
-          // For climb/descent phases, use minimal altitude adjustment
-          // Ground-level winds are already representative of low-altitude conditions
-          if (phase.phaseType === 'climb' || phase.phaseType === 'descent') {
-            // No altitude adjustment for climb/descent - use ground-level winds directly
-            // Ground-level winds are already representative of low-altitude conditions
-            windSpeed = w.baseWeather.windSpeed;
-            windSource = 'baseWeather_direct';
-          } else {
-            // Full adjustment for cruise phase
-            const altitudeFactor = Math.min(1 + (altitude / 10000) * 0.8, 2.5);
-            windSpeed = w.baseWeather.windSpeed * altitudeFactor;
-            windSource = 'baseWeather_adjusted';
+        // Get weather from correct structure
+        const weather = w.altitudeWeather?.[altitude] || w.baseWeather || w.weather;
+        if (!weather) return 'Light';
+        
+        // PHASE 1: Check cloud types first (most important!)
+        if (weather.description) {
+          const cloudAnalysis = this.parseCloudTypes(weather.description);
+          if (cloudAnalysis.hasTurbulentClouds) {
+            levelAtPoint = cloudAnalysis.severity;
+            console.log(`[Phase 1 Cloud] ${phase.name} at ${altitude}ft: ${cloudAnalysis.types.join(', ')} → ${levelAtPoint}`);
+            return levelAtPoint;
           }
         }
         
-        // Debug logging for LHR-JFK route
-        if (phase.name === 'Climb' || phase.name === 'Descent') {
-          console.log(`[${phase.name}] Alt ${altitude}ft: Wind ${windSpeed.toFixed(1)} mph (${windSource}), Base: ${w.baseWeather?.windSpeed || 'N/A'}`);
+        // PHASE 1: If no cloud-based turbulence, check wind conditions
+        // But don't use absolute wind speed - it's not a good indicator
+        const windSpeed = weather.windSpeed || 0;
+        
+        // Only upgrade to Light to Moderate if winds are very high (>100mph)
+        // High winds alone rarely cause turbulence without shear
+        if (windSpeed > 100) {
+          levelAtPoint = 'Light to Moderate';
         }
         
-        // Use phase-appropriate thresholds based on realistic aviation standards
-        let turbulenceLevel;
-        if (phase.phaseType === 'cruise') {
-          // High altitude thresholds (jet stream level - more sensitive to wind shear)
-          if (windSpeed < 60) turbulenceLevel = 'Light';
-          else if (windSpeed < 90) turbulenceLevel = 'Light to Moderate';
-          else if (windSpeed < 130) turbulenceLevel = 'Moderate';
-          else if (windSpeed < 160) turbulenceLevel = 'Moderate to Severe';
-          else turbulenceLevel = 'Severe';
-        } else {
-          // Force Light turbulence for climb/descent phases (debugging)
-          // This will help us identify if the issue is with thresholds or wind speed calculation
-          if (windSpeed < 200) turbulenceLevel = 'Light';
-          else if (windSpeed < 250) turbulenceLevel = 'Light to Moderate';
-          else if (windSpeed < 300) turbulenceLevel = 'Moderate';
-          else if (windSpeed < 350) turbulenceLevel = 'Moderate to Severe';
-          else turbulenceLevel = 'Severe';
-        }
-        
-        // Debug logging for LHR-JFK route
-        if (phase.name === 'Climb' || phase.name === 'Descent') {
-          console.log(`[${phase.name}] Alt ${altitude}ft: Wind ${windSpeed.toFixed(1)} mph → ${turbulenceLevel} (phaseType: ${phase.phaseType})`);
-        }
-        
-        return turbulenceLevel;
+        return levelAtPoint;
       });
       
       // Add all turbulence levels from this altitude to the overall collection
@@ -447,44 +1008,57 @@ class SimpleRouteService {
       console.log(`[${phase.name}] Final phase turbulence: ${baseTurbulence}`);
     }
     
-    // Apply phase-specific G-AIRMET analysis (only for phases in US airspace)
-    if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
-      // Check if this specific phase occurs within US airspace
+    // Apply phase-specific weather advisory analysis (G-AIRMETs + SIGMETs)
+    const advisoryData = this.getAdvisoriesFromFormat(weatherAdvisories);
+    if (advisoryData && advisoryData.hasAdvisories) {
+      const currentLevelValue = this.getSeverityValue(baseTurbulence);
+      let upgradedTurbulence = baseTurbulence;
+      let maxAdvisoryLevel = currentLevelValue;
+      
+      // Filter advisories by type
+      const gairmets = advisoryData.advisories.filter(a => a.type === 'G-AIRMET');
+      const sigmets = advisoryData.advisories.filter(a => a.type === 'SIGMET');
+      
+      // Check G-AIRMETs (only for phases in US airspace)
       const phaseInUSAirspace = this.phaseInUSAirspace(phase);
-      
-      if (!phaseInUSAirspace) {
-        console.log(`[${phase.name}] Phase occurs outside US airspace, skipping G-AIRMET analysis`);
-        return baseTurbulence;
-      }
-      
-      const phaseGAirmetAnalysis = this.analyzePhaseGAirmetImpact(gairmetAdvisories.advisories, phase);
-      
-      if (phaseGAirmetAnalysis.shouldUpgrade) {
-        const currentLevelValue = this.getSeverityValue(baseTurbulence);
-        const gairmetLevelValue = this.getSeverityValue(phaseGAirmetAnalysis.recommendedLevel);
+      if (phaseInUSAirspace && gairmets.length > 0) {
+        const phaseGAirmetAnalysis = this.analyzePhaseGAirmetImpact(gairmets, phase);
         
-        // For climb/descent phases, only upgrade if G-AIRMET is significantly higher
-        // and only upgrade by one level maximum
-        if (phase.phaseType === 'cruise') {
-          // Full G-AIRMET analysis for cruise phase
-          if (gairmetLevelValue > currentLevelValue) {
-            console.log(`[${phase.name}] G-AIRMET upgrading from ${baseTurbulence} to ${phaseGAirmetAnalysis.recommendedLevel}`);
-            baseTurbulence = phaseGAirmetAnalysis.recommendedLevel;
-          }
-        } else if (phase.phaseType === 'climb' || phase.phaseType === 'descent') {
-          // Apply G-AIRMET analysis for climb/descent phases with realistic thresholds
-          // Upgrade if G-AIRMET level is higher than current level
-          if (gairmetLevelValue > currentLevelValue) {
-            // For climb/descent, upgrade by one level maximum to avoid over-prediction
-            const upgradeLevels = Math.min(gairmetLevelValue - currentLevelValue, 1);
-            const upgradedLevel = this.getSeverityFromValue(currentLevelValue + upgradeLevels);
-            
-            console.log(`[${phase.name}] G-AIRMET upgrading from ${baseTurbulence} to ${upgradedLevel} (${phase.phaseType} phase)`);
-            baseTurbulence = upgradedLevel;
-          } else {
-            console.log(`[${phase.name}] G-AIRMET not upgrading ${phase.phaseType} phase (G-AIRMET level: ${phaseGAirmetAnalysis.recommendedLevel} <= current: ${baseTurbulence})`);
+        if (phaseGAirmetAnalysis.shouldUpgrade) {
+          const gairmetLevelValue = this.getSeverityValue(phaseGAirmetAnalysis.recommendedLevel);
+          if (gairmetLevelValue > maxAdvisoryLevel) {
+            maxAdvisoryLevel = gairmetLevelValue;
+            console.log(`[${phase.name}] G-AIRMET upgrade: ${baseTurbulence} → ${phaseGAirmetAnalysis.recommendedLevel}`);
           }
         }
+      }
+      
+      // Check SIGMETs (worldwide coverage - always check)
+      if (sigmets.length > 0) {
+        const phaseSigmetAnalysis = this.analyzePhaseGAirmetImpact(sigmets, phase);
+        
+        if (phaseSigmetAnalysis.shouldUpgrade) {
+          const sigmetLevelValue = this.getSeverityValue(phaseSigmetAnalysis.recommendedLevel);
+          if (sigmetLevelValue > maxAdvisoryLevel) {
+            maxAdvisoryLevel = sigmetLevelValue;
+            console.log(`[${phase.name}] SIGMET upgrade: ${baseTurbulence} → ${phaseSigmetAnalysis.recommendedLevel}`);
+          }
+        }
+      }
+      
+      // Apply the highest advisory level found
+      if (maxAdvisoryLevel > currentLevelValue) {
+        const advisoryLevelDifference = maxAdvisoryLevel - currentLevelValue;
+        
+        if (phase.phaseType === 'cruise') {
+          const upgradeAmount = advisoryLevelDifference * 0.7;
+          upgradedTurbulence = this.getSeverityFromValue(currentLevelValue + upgradeAmount);
+        } else if (phase.phaseType === 'climb' || phase.phaseType === 'descent') {
+          const upgradeAmount = advisoryLevelDifference * 0.4;
+          upgradedTurbulence = this.getSeverityFromValue(currentLevelValue + upgradeAmount);
+        }
+        
+        baseTurbulence = upgradedTurbulence;
       }
     }
     
@@ -492,7 +1066,7 @@ class SimpleRouteService {
   }
 
   // Calculate overall turbulence from individual levels
-  static calculateOverallTurbulence(turbulenceLevels, gairmetAdvisories = null) {
+  static calculateOverallTurbulence(turbulenceLevels, weatherAdvisories = null) {
     if (!turbulenceLevels || turbulenceLevels.length === 0) return 'Unknown';
     
     // Count occurrences
@@ -528,21 +1102,27 @@ class SimpleRouteService {
       finalLevel = 'Moderate';
     }
     
-    // Enhance with G-AIRMET data if available
-    if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
-      const gairmetAnalysis = this.analyzeGAirmetImpact(gairmetAdvisories.advisories, []);
+    // Enhance with weather advisory data if available (G-AIRMETs + SIGMETs)
+    if (!weatherAdvisories) return finalLevel;
+    
+    const advisoryData = this.getAdvisoriesFromFormat(weatherAdvisories);
+    if (advisoryData && advisoryData.hasAdvisories) {
+      const advisoryAnalysis = this.analyzeCombinedAdvisoryImpact(weatherAdvisories, []);
       
       const currentLevelValue = this.getSeverityValue(finalLevel);
-      const gairmetLevelValue = this.getSeverityValue(gairmetAnalysis.recommendedLevel);
+      const advisoryLevelValue = this.getSeverityValue(advisoryAnalysis.recommendedLevel);
       
-      if (finalLevel === 'Light' && gairmetLevelValue > currentLevelValue) {
-        finalLevel = gairmetAnalysis.recommendedLevel;
-      } else if (finalLevel === 'Light to Moderate' && gairmetLevelValue >= this.getSeverityValue('Moderate')) {
-        finalLevel = gairmetAnalysis.recommendedLevel;
-      } else if (gairmetLevelValue > currentLevelValue + 0.2) {
-        finalLevel = gairmetAnalysis.recommendedLevel;
-      } else if (gairmetLevelValue < currentLevelValue - 0.8) {
-        finalLevel = gairmetAnalysis.recommendedLevel;
+      // SIGMETs have stronger influence
+      const upgradeThreshold = advisoryAnalysis.hasSigmets ? 0.0 : 0.2;
+      
+      if (finalLevel === 'Light' && advisoryLevelValue > currentLevelValue) {
+        finalLevel = advisoryAnalysis.recommendedLevel;
+      } else if (finalLevel === 'Light to Moderate' && advisoryLevelValue >= this.getSeverityValue('Moderate')) {
+        finalLevel = advisoryAnalysis.recommendedLevel;
+      } else if (advisoryAnalysis.hasSigmets && advisoryLevelValue > currentLevelValue) {
+        finalLevel = advisoryAnalysis.recommendedLevel; // SIGMETs: Always upgrade
+      } else if (advisoryLevelValue > currentLevelValue + upgradeThreshold) {
+        finalLevel = advisoryAnalysis.recommendedLevel;
       }
     }
     
@@ -562,19 +1142,27 @@ class SimpleRouteService {
     
     let weightedSum = 0;
     let totalWeight = 0;
+    let maxSeverity = 0; // Track highest severity across all phases
     
     phaseAnalysis.forEach(phase => {
-      const weight = phaseWeights[phase.name] || 0.1; // Default weight
+      const weight = phaseWeights[phase.name] || 0.1;
       const severityValue = this.getSeverityValue(phase.turbulenceLevel);
       
       weightedSum += severityValue * weight;
       totalWeight += weight;
+      maxSeverity = Math.max(maxSeverity, severityValue);
     });
     
     if (totalWeight === 0) return 'Unknown';
     
     const averageSeverity = weightedSum / totalWeight;
-    return this.getSeverityFromValue(averageSeverity);
+    
+    // CRITICAL: If ANY phase has elevated turbulence (>1.5), ensure overall reflects this
+    // Don't let averaging pull down the prediction if passengers will experience turbulence
+    const finalSeverity = Math.max(averageSeverity, Math.min(maxSeverity, 2.5));
+    // Cap at 2.5 (Light to Moderate) to prevent one phase from over-inflating overall
+    
+    return this.getSeverityFromValue(finalSeverity);
   }
 
   // Get departure and arrival airport weather
@@ -665,12 +1253,9 @@ class SimpleRouteService {
       return {
         departureImpact: 'Unknown',
         arrivalImpact: 'Unknown',
-        overallImpact: 'Unknown',
-        recommendations: []
+        overallImpact: 'Unknown'
       };
     }
-    
-    const recommendations = [];
     
     // Analyze departure weather impact on climb phase
     let departureImpact = 'Minimal';
@@ -679,10 +1264,8 @@ class SimpleRouteService {
     
     if (airportWeather.departure.turbulence === 'Moderate' || airportWeather.departure.turbulence === 'Moderate to Severe') {
       departureImpact = 'Moderate';
-      recommendations.push('Expect some turbulence during climb phase');
     } else if (airportWeather.departure.turbulence === 'Severe') {
       departureImpact = 'High';
-      recommendations.push('Significant turbulence expected during climb - pilots may delay departure');
     }
     
     // Analyze arrival weather impact on descent phase
@@ -692,10 +1275,8 @@ class SimpleRouteService {
     
     if (airportWeather.arrival.turbulence === 'Moderate' || airportWeather.arrival.turbulence === 'Moderate to Severe') {
       arrivalImpact = 'Moderate';
-      recommendations.push('Expect some turbulence during descent phase');
     } else if (airportWeather.arrival.turbulence === 'Severe') {
       arrivalImpact = 'High';
-      recommendations.push('Significant turbulence expected during descent - pilots may divert to alternate airport');
     }
     
     // Overall impact assessment
@@ -706,19 +1287,10 @@ class SimpleRouteService {
       overallImpact = 'Moderate';
     }
     
-    // Add visibility considerations
-    if (airportWeather.departure.weather.visibility < 5) {
-      recommendations.push('Low visibility at departure - may affect takeoff timing');
-    }
-    if (airportWeather.arrival.weather.visibility < 5) {
-      recommendations.push('Low visibility at arrival - may affect landing approach');
-    }
-    
     return {
       departureImpact,
       arrivalImpact,
       overallImpact,
-      recommendations,
       departureWeather: airportWeather.departure,
       arrivalWeather: airportWeather.arrival
     };
@@ -811,14 +1383,18 @@ class SimpleRouteService {
     // Direct match
     if (gairmetLower === routeLower) return true;
     
-    // Check for overlapping regions
+    // Check for overlapping regions - made MORE PERMISSIVE
+    // Routes often cross through multiple regions, so "Central United States" 
+    // can affect flights between Southwest and West Coast
     const regionMappings = {
-      'central united states': ['central united states', 'general us', 'south central', 'northwest'],
-      'west coast': ['west coast', 'california', 'pacific'],
-      'southwest': ['southwest', 'arizona', 'nevada', 'utah'],
-      'northeast': ['northeast', 'new york', 'new england'],
-      'southeast': ['southeast', 'florida', 'georgia'],
-      'general us': ['central united states', 'west coast', 'southwest', 'northeast', 'southeast', 'general us']
+      'central united states': ['central united states', 'general us', 'south central', 'northwest', 'southwest', 'west coast', 'northeast', 'southeast'],
+      'west coast': ['west coast', 'california', 'pacific', 'northwest', 'southwest', 'central united states'],
+      'southwest': ['southwest', 'arizona', 'nevada', 'utah', 'west coast', 'south central', 'central united states'],
+      'south central': ['south central', 'southwest', 'southeast', 'central united states'],
+      'northeast': ['northeast', 'new york', 'new england', 'central united states'],
+      'southeast': ['southeast', 'florida', 'georgia', 'south central', 'central united states'],
+      'northwest': ['northwest', 'west coast', 'central united states'],
+      'general us': ['central united states', 'west coast', 'southwest', 'northeast', 'southeast', 'general us', 'south central', 'northwest']
     };
     
     const gairmetRegions = regionMappings[gairmetLower] || [gairmetLower];
@@ -842,23 +1418,94 @@ class SimpleRouteService {
     return inside;
   }
 
+  /**
+   * Calculate what percentage of a phase's route intersects with a G-AIRMET polygon
+   * Returns a value between 0.0 (no overlap) and 1.0 (complete overlap)
+   */
+  static calculatePhaseGAirmetCoverage(phaseWaypoints, gairmetCoordinates) {
+    if (!phaseWaypoints || !gairmetCoordinates || gairmetCoordinates.length < 3) {
+      return 0;
+    }
+    
+    // Sample the phase route and check how many points fall within the G-AIRMET
+    let pointsInside = 0;
+    const totalPoints = phaseWaypoints.length;
+    
+    for (const waypoint of phaseWaypoints) {
+      if (!waypoint || !Array.isArray(waypoint) || waypoint.length < 2) continue;
+      
+      const lat = waypoint[0];
+      const lng = waypoint[1];
+      
+      if (this.isPointInPolygon([lat, lng], gairmetCoordinates)) {
+        pointsInside++;
+      }
+    }
+    
+    return totalPoints > 0 ? pointsInside / totalPoints : 0;
+  }
+
+  /**
+   * Calculate upgrade multiplier based on G-AIRMET coverage
+   * Uses probabilistic approach to account for the fact that G-AIRMETs are
+   * area forecasts, not point-by-point certainties
+   */
+  static calculateGAirmetUpgradeMultiplier(coverage, hasCoordinates, phaseType) {
+    // G-AIRMET confidence factor: They're forecasts, not certainties (60-70% accuracy)
+    const GAIRMET_CONFIDENCE = 0.65;
+    
+    let coverageMultiplier;
+    
+    if (hasCoordinates && coverage !== null) {
+      // Geographic coverage-based scaling
+      if (coverage < 0.2) {
+        coverageMultiplier = 0.0;  // <20% overlap: no upgrade (barely touches advisory)
+      } else if (coverage < 0.4) {
+        coverageMultiplier = 0.3;  // 20-40%: minor impact
+      } else if (coverage < 0.6) {
+        coverageMultiplier = 0.5;  // 40-60%: moderate impact
+      } else if (coverage < 0.8) {
+        coverageMultiplier = 0.7;  // 60-80%: significant impact
+      } else {
+        coverageMultiplier = 0.9;  // 80-100%: major impact
+      }
+    } else {
+      // Probabilistic fallback when no coordinates
+      // Assume ~30-40% of advisory area typically has actual turbulence
+      coverageMultiplier = 0.35;
+    }
+    
+    // Phase-specific adjustment
+    // Cruise: more vulnerable (spending most time at altitude)
+    // Climb/Descent: less vulnerable (passing through quickly)
+    let phaseMultiplier = 1.0;
+    if (phaseType === 'cruise') {
+      phaseMultiplier = 1.2;  // Cruise is 20% more affected
+    } else if (phaseType === 'climb' || phaseType === 'descent') {
+      phaseMultiplier = 0.8;  // Climb/descent are 20% less affected
+    }
+    
+    // Final multiplier combines all factors
+    const finalMultiplier = coverageMultiplier * GAIRMET_CONFIDENCE * phaseMultiplier;
+    
+    return Math.min(finalMultiplier, 1.0); // Cap at 1.0
+  }
+
   // Phase-specific G-AIRMET impact analysis
   static analyzePhaseGAirmetImpact(advisories, phase) {
     if (!advisories || advisories.length === 0) {
-      console.log(`[${phase.name}] No G-AIRMET advisories provided`);
       return { shouldUpgrade: false, shouldDowngrade: false, recommendedLevel: null };
     }
-
-    console.log(`[${phase.name}] Analyzing ${advisories.length} G-AIRMET advisories for phase ${phase.name} (${phase.phaseType})`);
-    console.log(`[${phase.name}] Phase altitude range: ${phase.altitudeRange.min}-${phase.altitudeRange.max} ft`);
 
     // Analyze each advisory for this specific phase
     const phaseAdvisoryAnalysis = advisories.map((advisory, index) => {
       const severity = advisory.severity || 'Moderate';
       const area = advisory.area || 'Unknown';
-      const altitude = advisory.altitude || { min: 0, max: 999999 };
       
-      console.log(`[${phase.name}] Advisory ${index + 1}: ${severity} turbulence in ${area} at ${altitude.min}-${altitude.max} ft`);
+      // ALTITUDE FORMAT: All altitudes from advisory services should already be in FEET
+      // G-AIRMETs: Converted from Flight Levels to feet in gAirmetService.js
+      // SIGMETs: Converted from Flight Levels to feet in weatherAdvisoryService.js
+      const altitude = this.normalizeAltitudeToFeet(advisory.altitude || { min: 0, max: 999999 });
       
       // Check if this advisory affects the current phase's altitude range
       const phaseAltitudeMin = phase.altitudeRange.min;
@@ -867,53 +1514,50 @@ class SimpleRouteService {
       // Determine if advisory altitude overlaps with phase altitude
       const altitudeOverlap = !(altitude.max < phaseAltitudeMin || altitude.min > phaseAltitudeMax);
       
-      console.log(`[${phase.name}] Altitude overlap check: G-AIRMET ${altitude.min}-${altitude.max} ft vs Phase ${phaseAltitudeMin}-${phaseAltitudeMax} ft = ${altitudeOverlap}`);
-      
       if (!altitudeOverlap) {
-        console.log(`[${phase.name}] Skipping advisory ${index + 1} - no altitude overlap`);
         return null; // Skip advisories that don't affect this phase
       }
       
-      // Check if this advisory geographically intersects with the phase waypoints
+      // Calculate geographic coverage (what % of phase route is in G-AIRMET area)
+      let coverage = null;
+      let hasCoordinates = false;
+      
       if (advisory.coordinates && advisory.coordinates.length > 0) {
-        const hasGeographicIntersection = this.checkPhaseGAirmetIntersection(phase.waypoints, advisory.coordinates);
-        console.log(`[${phase.name}] Geographic intersection check: ${hasGeographicIntersection}`);
-        if (!hasGeographicIntersection) {
-          console.log(`[${phase.name}] Skipping advisory ${index + 1} - no geographic intersection`);
-          return null; // Skip advisories that don't geographically intersect with this phase
+        hasCoordinates = true;
+        coverage = this.calculatePhaseGAirmetCoverage(phase.waypoints, advisory.coordinates);
+        
+        // If coverage is too low (<20%), skip this advisory
+        if (coverage < 0.2) {
+          return null;
         }
       } else {
-        console.log(`[${phase.name}] No coordinates available, applying geographic region filtering`);
-        
         // If no coordinates available, check if G-AIRMET geographic region matches the route
         const gairmetRegion = advisory.area || '';
         const routeRegion = this.getRouteGeographicRegion(phase.waypoints);
         
-        console.log(`[${phase.name}] G-AIRMET region: "${gairmetRegion}", Route region: "${routeRegion}"`);
-        
         // Check if G-AIRMET region matches route region
         if (!this.isGeographicRegionMatch(gairmetRegion, routeRegion)) {
-          console.log(`[${phase.name}] Skipping advisory ${index + 1} - G-AIRMET region "${gairmetRegion}" doesn't match route region "${routeRegion}"`);
           return null;
         }
         
         // Apply altitude-based logic only if geographic regions match
         if (phase.phaseType === 'descent') {
-          // For descent phases, only apply G-AIRMETs that cover altitudes the descent phase passes through
-          // Descent goes from 30k ft down to 0 ft, so G-AIRMETs should overlap with 0-30k ft range
-          if (altitude.max < 200) { // G-AIRMETs below 20k ft (200 = 20,000 ft) shouldn't affect descent
-            console.log(`[${phase.name}] Skipping advisory ${index + 1} - G-AIRMET below 20k ft for descent phase`);
+          // Descent goes from cruise (~35k ft) down to 0 ft
+          // Only skip very low altitude G-AIRMETs (below 5k ft - ground level only)
+          if (altitude.max < 5000) {
             return null;
           }
         } else if (phase.phaseType === 'climb') {
-          // For climb phases, only apply G-AIRMETs that cover altitudes the climb phase passes through
-          // Climb goes from 0 ft up to 30k ft, so G-AIRMETs should overlap with 0-30k ft range
-          if (altitude.min > 300) { // G-AIRMETs above 30k ft (300 = 30,000 ft) shouldn't affect climb phase
-            console.log(`[${phase.name}] Skipping advisory ${index + 1} - G-AIRMET above 30k ft for climb phase`);
+          // Climb goes from 0 ft up to cruise (~35k ft)
+          // Only skip very high altitude G-AIRMETs (above 40k ft - beyond typical climb)
+          if (altitude.min > 40000) {
             return null;
           }
         }
       }
+      
+      // Calculate G-AIRMET upgrade multiplier (probabilistic, coverage-based)
+      const upgradeMultiplier = this.calculateGAirmetUpgradeMultiplier(coverage, hasCoordinates, phase.phaseType);
       
       // Determine impact weight based on coverage and severity
       let impactWeight = this.getSeverityWeight(severity);
@@ -921,43 +1565,48 @@ class SimpleRouteService {
       // Adjust weight based on altitude coverage overlap
       const overlapMin = Math.max(altitude.min, phaseAltitudeMin);
       const overlapMax = Math.min(altitude.max, phaseAltitudeMax);
-      const overlapRatio = (overlapMax - overlapMin) / (phaseAltitudeMax - phaseAltitudeMin);
+      const altitudeOverlapRatio = (overlapMax - overlapMin) / (phaseAltitudeMax - phaseAltitudeMin);
       
-      impactWeight *= overlapRatio; // Weight by altitude overlap
+      // Apply both altitude overlap and geographic coverage multipliers
+      impactWeight *= altitudeOverlapRatio * upgradeMultiplier;
       
       return {
         severity,
         area,
         altitude,
         impactWeight,
-        overlapRatio,
+        altitudeOverlapRatio,
+        upgradeMultiplier,
+        coverage: coverage !== null ? coverage : 0.35, // Use 35% as default when no coordinates
         advisory
       };
     }).filter(analysis => analysis !== null);
 
     if (phaseAdvisoryAnalysis.length === 0) {
-      console.log(`[${phase.name}] No applicable G-AIRMET advisories found for this phase`);
       return { shouldUpgrade: false, shouldDowngrade: false, recommendedLevel: null };
     }
-
-    console.log(`[${phase.name}] Found ${phaseAdvisoryAnalysis.length} applicable G-AIRMET advisories`);
 
     // Calculate weighted average severity for this phase
     const totalWeight = phaseAdvisoryAnalysis.reduce((sum, analysis) => sum + analysis.impactWeight, 0);
     const weightedSeverity = totalWeight > 0 ? phaseAdvisoryAnalysis.reduce((sum, analysis) => {
       const severityValue = this.getSeverityValue(analysis.severity);
       return sum + (severityValue * analysis.impactWeight);
-    }, 0) / totalWeight : 3; // Default to 'Moderate' if no weight
+    }, 0) / totalWeight : 3;
 
-    // Determine recommended level based on weighted analysis
-    const recommendedLevel = this.getSeverityFromValue(weightedSeverity);
+    // Apply average multiplier to scale down the recommended level (probabilistic approach)
+    const avgMultiplier = phaseAdvisoryAnalysis.reduce((sum, a) => sum + a.upgradeMultiplier, 0) / phaseAdvisoryAnalysis.length;
     
-    console.log(`[${phase.name}] G-AIRMET analysis result: shouldUpgrade=true, recommendedLevel=${recommendedLevel}`);
+    // Scale the weighted severity by the average multiplier
+    const baseSeverity = 1; // Light baseline
+    const adjustedSeverity = baseSeverity + ((weightedSeverity - baseSeverity) * avgMultiplier);
+    
+    const recommendedLevel = this.getSeverityFromValue(adjustedSeverity);
     
     return {
-      shouldUpgrade: true, // Always consider G-AIRMET for phase-specific analysis
+      shouldUpgrade: true,
       shouldDowngrade: false,
       recommendedLevel: recommendedLevel,
+      adjustedSeverity: adjustedSeverity,
       phaseAdvisories: phaseAdvisoryAnalysis
     };
   }
@@ -1079,8 +1728,70 @@ class SimpleRouteService {
     return gairmetIndex > currentIndex;
   }
 
+  /**
+   * Extract turbulence level from AI's text response
+   * The AI will say something like "I predict Light to Moderate turbulence"
+   * We need to extract the actual level from that text
+   */
+  static extractTurbulenceLevelFromAI(aiResponse) {
+    if (!aiResponse) return null;
+    
+    const responseUpper = aiResponse.toUpperCase();
+    
+    // Define turbulence levels in order of specificity (most specific first)
+    const turbulenceLevels = [
+      'MODERATE TO SEVERE',
+      'LIGHT TO MODERATE',
+      'SEVERE',
+      'MODERATE',
+      'LIGHT'
+    ];
+    
+    // Look for phrases like "predict [level]", "expect [level]", "experience [level]"
+    const patterns = [
+      /(?:PREDICT|EXPECTING|EXPECT|EXPERIENCE|ANTICIPATE|FORECAST)(?:ING)?\s+(?:THAT\s+)?(?:YOU\s+)?(?:MAY\s+)?(?:WILL\s+)?(LIGHT TO MODERATE|MODERATE TO SEVERE|LIGHT|MODERATE|SEVERE)/i,
+      /(?:TURBULENCE\s+(?:LEVEL\s+)?(?:IS\s+|WILL BE\s+)?)(LIGHT TO MODERATE|MODERATE TO SEVERE|LIGHT|MODERATE|SEVERE)/i,
+      /^(?:FOR YOUR FLIGHT.*?)(LIGHT TO MODERATE|MODERATE TO SEVERE|LIGHT|MODERATE|SEVERE)\s+TURBULENCE/im
+    ];
+    
+    // Try pattern matching first
+    for (const pattern of patterns) {
+      const match = aiResponse.match(pattern);
+      if (match && match[1]) {
+        const level = match[1].trim();
+        // Convert to proper case
+        return level.split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(' ');
+      }
+    }
+    
+    // Fallback: find first occurrence of any turbulence level
+    for (const level of turbulenceLevels) {
+      if (responseUpper.includes(level + ' TURBULENCE') || 
+          responseUpper.includes('TURBULENCE' + ' ' + level)) {
+        // Convert to proper case
+        return level.split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(' ');
+      }
+    }
+    
+    // Last resort: just find any turbulence level mentioned early in the response
+    const firstParagraph = aiResponse.substring(0, 300); // First 300 chars
+    for (const level of turbulenceLevels) {
+      if (firstParagraph.toUpperCase().includes(level)) {
+        return level.split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(' ');
+      }
+    }
+    
+    return null; // Couldn't extract a level
+  }
+
   // Get AI-powered turbulence analysis from OpenAI
-  static async getOpenAIAnalysis(weatherData, turbulenceLevel, route, gairmetAdvisories, phaseAnalysis = null) {
+  static async getOpenAIAnalysis(weatherData, turbulenceLevel, route, weatherAdvisories, phaseAnalysis = null) {
     try {
       const apiKey = process.env.AI_API_KEY;
       const endpoint = process.env.AI_MODEL_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
@@ -1124,64 +1835,82 @@ class SimpleRouteService {
         };
       });
 
-      // Create prompt for OpenAI
-      const prompt = `You are an expert aviation meteorologist analyzing turbulence conditions for a commercial flight.
+      // Enhanced AI prompt - Focus on PRIMARY factors, not template
+      const prompt = `You are an aviation meteorologist analyzing turbulence for the ${route.departure} to ${route.arrival} route.
 
-Route: ${route.departure} → ${route.arrival}
-FINAL predicted turbulence level (already enhanced with G-AIRMET data): ${turbulenceLevel}
-
-Weather data along the route:
+WEATHER DATA:
 ${JSON.stringify(weatherSummary, null, 2)}
 
-${gairmetAdvisories && gairmetAdvisories.hasAdvisories ? 
-  `G-AIRMET advisories: ${JSON.stringify(gairmetAdvisories.advisories, null, 2)}` : 
-  'No active G-AIRMET advisories'}
+${(() => {
+      const advisoryData = this.getAdvisoriesFromFormat(weatherAdvisories);
+      if (advisoryData && advisoryData.hasAdvisories) {
+        const sigmets = advisoryData.advisories.filter(a => a.type === 'SIGMET');
+        const gairmets = advisoryData.advisories.filter(a => a.type === 'G-AIRMET');
+        let result = '';
+        if (sigmets.length > 0) {
+          result += `SIGMET ADVISORIES (urgent pilot warnings):\n${JSON.stringify(sigmets, null, 2)}\n\n`;
+        }
+        if (gairmets.length > 0) {
+          result += `G-AIRMET ADVISORIES (official forecasts - altitudes in hundreds of feet):\n${JSON.stringify(gairmets, null, 2)}`;
+        }
+        return result;
+      }
+      return 'No weather advisories';
+    })()}
 
 ${phaseAnalysis && phaseAnalysis.length > 0 ? 
-  `Flight Phase Analysis:
-${phaseAnalysis.map(phase => `- ${phase.name}: ${phase.turbulenceLevel} (${phase.phaseType === 'descent' ? `${Math.round(phase.altitudeRange.max/1000)}k-${Math.round(phase.altitudeRange.min/1000)}k ft` : `${Math.round(phase.altitudeRange.min/1000)}k-${Math.round(phase.altitudeRange.max/1000)}k ft`})`).join('\n')}` : 
-  ''}
+  `PHASE PREDICTIONS:
+${phaseAnalysis.map(phase => `- ${phase.name}: ${phase.turbulenceLevel}`).join('\n')}` : ''}
 
-IMPORTANT: The turbulence level above (${turbulenceLevel}) is the FINAL prediction that already incorporates G-AIRMET data. Do not change this level in your response. 
+TURBULENCE CAUSES TO ANALYZE:
+- Wind shear (changes in wind direction/speed - PRIMARY cause)
+- Storm clouds (CB, TCU in descriptions - causes severe turbulence)
+- Temperature gradients (frontal systems, inversions - causes CAT)
+- Jet streams (high-altitude winds - smooth unless there's shear)
+- Mountain waves (terrain-induced turbulence)
+- Convective activity (thunderstorms, unstable air)
 
-CRITICAL ALTITUDE CONVERSION: G-AIRMET altitude values are in hundreds of feet, NOT thousands. For example:
-- If G-AIRMET shows altitude 250-390, this means 25,000-39,000 feet (NOT 2,500-3,900 feet)
-- If G-AIRMET shows altitude 200-300, this means 20,000-30,000 feet (NOT 2,000-3,000 feet)
-- Always multiply G-AIRMET altitude values by 100 to get the actual altitude in feet
+YOUR TASK:
+Craft a unique, personalized explanation for THIS specific route (${route.departure} to ${route.arrival}). Write a natural paragraph (3-5 sentences) that:
 
-HISTORICAL ROUTE ANALYSIS - Please research and recall:
-- Known turbulence patterns for the ${route.departure} to ${route.arrival} route
-- Typical weather systems affecting this flight path (jet streams, mountain waves, convective activity)
-- Seasonal variations in turbulence for this route
-- Common atmospheric phenomena in this geographic region
-- Historical flight reports and pilot experiences on similar routes
+1. Identifies the PRIMARY weather factor affecting THIS specific flight path
+2. Explains how it impacts YOUR flight through the actual geographic regions you're crossing
+3. If advisories exist, explains what specific conditions YOUR route will encounter
 
-Please provide a concise 4-5 sentence summary that includes:
-1. The FINAL predicted turbulence level: ${turbulenceLevel} (include full airport names)
-2. The main atmospheric factor causing it
-3. Flight phase breakdown - mention which phases (climb, cruise, descent) will experience turbulence and at what altitudes (REMEMBER: multiply G-AIRMET altitude values by 100)
-4. ${gairmetAdvisories && gairmetAdvisories.hasAdvisories ? 'MANDATORY: Discuss the G-AIRMET advisories and how they specifically affect the flight phases. Mention the G-AIRMET severity levels and altitude ranges (multiply by 100).' : 'Historical context about this route\'s typical turbulence patterns'}
-5. A brief, reassuring statement for passengers (the user is an anxious passenger) to help them understand the turbulence and calm them down
+CRITICAL RULES - PERSPECTIVE:
+- ALWAYS use second person: "you", "your", "you'll"
+- NEVER use "I", "we", "our", or "us"
+- Write AS IF speaking directly to the passenger about THEIR specific flight
+- Good: "Your flight crosses through..." / "You'll experience..."
+- Bad: "We see..." / "I expect..." / "Our analysis shows..."
 
-REMINDER: When mentioning G-AIRMET altitudes, always multiply by 100. For example, "250-390 feet" should be stated as "25,000-39,000 feet".
-${gairmetAdvisories && gairmetAdvisories.hasAdvisories ? 'CRITICAL: You MUST mention the G-AIRMET advisories in your response when they are present. Explain how they contribute to the turbulence prediction.' : ''}
+CRITICAL RULES - CONTENT:
+- Make EVERY response unique based on:
+  * Actual route geography (${route.departure} to ${route.arrival})
+  * Specific regions crossed (Southwest, West Coast, etc.)
+  * Current weather advisories on THIS route
+  * Phase-specific conditions (if relevant)
+- NO generic responses - if two routes have different weather, explanations must differ
+- If weather is calm, explain WHY for THIS route (stable air patterns, high pressure, etc.)
+- If advisories exist, explain the SPECIFIC meteorological conditions causing them
+- Current estimate: ${turbulenceLevel} (adjust only if weather clearly contradicts this)
 
-Keep it clear, professional, and easy to understand. Reference specific geographic or meteorological factors when relevant.`;
+Write as if you're a meteorologist speaking directly to a nervous passenger about their specific flight. No lists, no markdown, just natural conversation.`;
 
       const response = await axios.post(endpoint, {
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: "You are an expert aviation meteorologist with deep knowledge of turbulence prediction, atmospheric physics, and flight safety. Provide accurate, professional analysis based on the weather data provided. The user is an anxious passenger and you are helping them understand the turbulence and calm them down."
+            content: "You are an aviation meteorologist explaining weather to a nervous passenger on their specific flight. CRITICAL: Always use 'you/your/you'll' - NEVER 'I/we/our'. Speak directly TO the passenger about THEIR flight. Make every response unique based on the actual route geography, regions crossed, and current weather conditions. No generic templates - if Phoenix to Oakland has different weather than New York to Miami, your explanations must reflect those differences. Focus on specific meteorological phenomena (jet streams, frontal systems, wind shear, stable high pressure, etc.) affecting THIS particular route. Plain text only, conversational tone."
           },
           {
             role: "user", 
             content: prompt
           }
         ],
-        max_tokens: 200,
-        temperature: 0.3
+        max_tokens: 300,
+        temperature: 0.7
       }, {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -1193,13 +1922,18 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       if (response.data && response.data.choices && response.data.choices[0]) {
         const aiResponse = response.data.choices[0].message.content;
         
-        // Use the final G-AIRMET enhanced turbulence level instead of extracting from AI response
-        // This ensures consistency between the main prediction and AI analysis
+        // PHASE 1: Extract the AI's actual turbulence prediction from its response
+        const extractedLevel = this.extractTurbulenceLevelFromAI(aiResponse);
+        
+        // Use AI's prediction if it's valid, otherwise fall back to rule-based
+        const aiPredictedLevel = extractedLevel || turbulenceLevel;
+        
         return {
           summary: aiResponse.trim(),
-          enhancedTurbulenceLevel: turbulenceLevel, // Use the final G-AIRMET enhanced level
-          confidence: 0.8, // High confidence for AI analysis
-          aiEnhanced: true
+          enhancedTurbulenceLevel: aiPredictedLevel, // Use AI's prediction!
+          confidence: 0.85, // High confidence when AI makes prediction
+          aiEnhanced: true,
+          aiOverride: extractedLevel !== turbulenceLevel // Flag if AI changed it
         };
       }
 
@@ -1266,28 +2000,41 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       console.warn('Airport weather failed:', error.message);
     }
      
-    // Get G-AIRMET turbulence advisories for enhanced accuracy
-    let gairmetAdvisories = null;
+    // Get combined weather advisories (G-AIRMETs + SIGMETs) for enhanced accuracy
+    let weatherAdvisories = null;
     let allGairmets = null;
     
     try {
-      const gairmetPromise = Promise.all([
-        GAirmetService.getTurbulenceAdvisories(departure, arrival, waypoints),
-        GAirmetService.getAllCurrentGAirmets()
+      const advisoryPromise = Promise.all([
+        WeatherAdvisoryService.getCombinedAdvisories(departure, arrival, waypoints),
+        GAirmetService.getAllCurrentGAirmets() // Keep for backward compatibility
       ]);
       
       const [advisories, allGairmetsData] = await Promise.race([
-        gairmetPromise,
+        advisoryPromise,
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('G-AIRMET timeout')), 8000) // 8 second timeout
+          setTimeout(() => reject(new Error('Weather advisory timeout')), 10000) // 10 second timeout (longer for SIGMETs)
         )
       ]);
       
-      gairmetAdvisories = advisories;
+      weatherAdvisories = advisories;
       allGairmets = allGairmetsData;
       
     } catch (error) {
-      // Continue without G-AIRMET data - not critical for basic route analysis
+      console.warn('Weather advisory fetch failed:', error.message);
+      // Continue without advisory data - not critical for basic route analysis
+      weatherAdvisories = { hasAdvisories: false, advisories: [], gairmets: { hasAdvisories: false, advisories: [] }, sigmets: { hasAdvisories: false, advisories: [] } };
+    }
+    
+    // PHASE 1: Fetch PIREPs (real pilot turbulence reports)
+    let pirepData = null;
+    try {
+      pirepData = await this.getPirepsForRoute(waypoints);
+      if (pirepData.hasPireps) {
+        console.log(`[Phase 1] Found ${pirepData.turbulenceReports.length} PIREP turbulence reports on route`);
+      }
+    } catch (error) {
+      console.warn('[Phase 1] PIREP fetch failed:', error.message);
     }
     
     // Calculate turbulence for each phase
@@ -1295,7 +2042,7 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       name: phase.name,
       phaseType: phase.phaseType,
       altitudeBand: phase.altitudeBand,
-      turbulenceLevel: this.calculatePhaseTurbulence(phase, multiAltitudeWeather, gairmetAdvisories),
+      turbulenceLevel: this.calculatePhaseTurbulence(phase, multiAltitudeWeather, weatherAdvisories),
       waypoints: phase.waypoints.length,
       altitudeRange: phase.altitudeRange,
       coordinates: phase.waypoints
@@ -1303,13 +2050,14 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
     
     // Calculate overall route turbulence (weighted by phase duration)
     const overallTurbulence = this.calculateWeightedTurbulence(phaseAnalysis);
+    console.log(`Phase predictions: ${phaseAnalysis.map(p => `${p.name}=${p.turbulenceLevel}`).join(', ')} → Overall: ${overallTurbulence}`);
     
     // Calculate weather-based turbulence (legacy method for backward compatibility)
     const weatherBasedTurbulence = weatherData.length > 0 ? 
       this.calculateTurbulence(weatherData, null) : 
       overallTurbulence;
     
-    // Calculate final turbulence (use phase-based analysis with G-AIRMET upgrades)
+    // Calculate final turbulence (use phase-based analysis)
     const turbulenceLevel = overallTurbulence;
     
     // Analyze airport weather impact
@@ -1323,7 +2071,7 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
     let aiAnalysis = null;
     try {
       aiAnalysis = await Promise.race([
-        this.getOpenAIAnalysis(weatherData.length > 0 ? weatherData : multiAltitudeWeather, turbulenceLevel, routeInfo, gairmetAdvisories, phaseAnalysis),
+        this.getOpenAIAnalysis(weatherData.length > 0 ? weatherData : multiAltitudeWeather, turbulenceLevel, routeInfo, weatherAdvisories, phaseAnalysis),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('AI analysis timeout')), 25000) // 25 second timeout
         )
@@ -1332,44 +2080,46 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       // Continue without AI analysis
     }
     
-    // Use AI-enhanced prediction if available, otherwise fall back to rule-based
-    const finalTurbulenceLevel = aiAnalysis?.enhancedTurbulenceLevel || turbulenceLevel;
+    // Use AI-enhanced prediction if available, but with constraints
+    let finalTurbulenceLevel = turbulenceLevel;
     const aiConfidence = aiAnalysis?.confidence || null;
+    
+    // AI can suggest changes, but we validate them against phase analysis
+    if (aiAnalysis?.enhancedTurbulenceLevel && aiAnalysis.enhancedTurbulenceLevel !== turbulenceLevel) {
+      const aiValue = this.getSeverityValue(aiAnalysis.enhancedTurbulenceLevel);
+      const phaseValue = this.getSeverityValue(turbulenceLevel);
+      const difference = Math.abs(aiValue - phaseValue);
+      
+      // Only allow AI to adjust by ±1 level from phase-based prediction
+      if (difference <= 1) {
+        finalTurbulenceLevel = aiAnalysis.enhancedTurbulenceLevel;
+        console.log(`AI adjusted: ${turbulenceLevel} → ${finalTurbulenceLevel}`);
+      } else {
+        console.log(`AI override rejected: ${turbulenceLevel} → ${aiAnalysis.enhancedTurbulenceLevel} (too large difference)`);
+      }
+    }
     
     // Calculate dynamic confidence based on multiple factors
     const baseConfidence = this.calculateConfidence(
       weatherData.length > 0 ? weatherData : multiAltitudeWeather, 
-      gairmetAdvisories, 
+      weatherAdvisories, 
       waypoints, 
       distance
     );
     
-    // When G-AIRMETs are present, prioritize the enhanced base confidence over AI confidence averaging
+    // When weather advisories (G-AIRMETs/SIGMETs) are present, prioritize the enhanced base confidence
     let finalConfidence;
-    if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
-      // G-AIRMET enhanced confidence takes priority - don't average down with AI confidence
+    const advisoryData = this.getAdvisoriesFromFormat(weatherAdvisories);
+    if (advisoryData && advisoryData.hasAdvisories) {
+      // Advisory-enhanced confidence takes priority (official aviation data)
       finalConfidence = baseConfidence;
     } else {
-      // For non-G-AIRMET routes, average with AI confidence if available
+      // For routes without advisories, average with AI confidence if available
       finalConfidence = aiConfidence ? (baseConfidence + aiConfidence) / 2 : baseConfidence;
     }
     
     // Use rule-based factors as base
-    const ruleBasedFactors = this.generateTurbulenceFactors(finalTurbulenceLevel, weatherData.length > 0 ? weatherData : multiAltitudeWeather, gairmetAdvisories);
-    
-    // Generate recommendations
-    const ruleBasedRecommendations = this.generateRecommendations(finalTurbulenceLevel, distance, gairmetAdvisories);
-    
-    // Add airport weather recommendations if available
-    if (airportWeatherImpact && airportWeatherImpact.recommendations.length > 0) {
-      airportWeatherImpact.recommendations.forEach(rec => {
-        ruleBasedRecommendations.push({
-          icon: '🏢',
-          type: 'Airport Conditions',
-          text: rec
-        });
-      });
-    }
+    const ruleBasedFactors = this.generateTurbulenceFactors(finalTurbulenceLevel, weatherData.length > 0 ? weatherData : multiAltitudeWeather, weatherAdvisories);
                   
     // Create route object matching frontend expectations
     const route = {
@@ -1382,9 +2132,11 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
         coordinates: waypoints
       },
       weatherData: weatherData.length > 0 ? weatherData : multiAltitudeWeather, // Add weather data for waypoint display
-      gairmetAdvisories: gairmetAdvisories,
+      weatherAdvisories: weatherAdvisories, // Combined G-AIRMETs + SIGMETs
+      gairmetAdvisories: weatherAdvisories?.gairmets || { hasAdvisories: false, advisories: [] }, // Backward compatibility
+      sigmetAdvisories: weatherAdvisories?.sigmets || { hasAdvisories: false, advisories: [] },
+      pirepData: pirepData, // PHASE 1: Real pilot turbulence reports
       allGairmets: allGairmets,
-      recommendations: ruleBasedRecommendations,
       distance: Math.round(distance),
       estimatedDuration: this.estimateFlightTime(distance),
       generatedAt: new Date().toISOString(),
@@ -1417,13 +2169,13 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       altitudeBand: 'climb'
     });
     
-    // Cruise phase (20-80% of route)
+    // Cruise phase (20-80% of route) - typical cruising altitude at 35,000 ft
     const cruiseStart = climbEnd;
     const cruiseEnd = Math.floor(totalWaypoints * 0.8);
     phases.push({
       name: 'Cruise',
       waypoints: waypoints.slice(cruiseStart, cruiseEnd),
-      altitudeRange: { min: 30000, max: 40000 },
+      altitudeRange: { min: 35000, max: 35000 }, // Cruising altitude at 35,000 ft (displayed as ± 35,000)
       phaseType: 'cruise',
       altitudeBand: 'cruise'
     });
@@ -1475,155 +2227,8 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
     return R * c;
   }
 
-  // Generate intelligent, level-appropriate recommendations
-  static generateRecommendations(turbulenceLevel, distance, gairmetAdvisories) {
-    const recommendations = [];
-    
-    // Base recommendations for all flights
-    recommendations.push({
-      icon: '✈️',
-      type: 'Flight Info',
-      text: 'Your pilots are highly trained professionals who handle these conditions daily'
-    });
-    
-    recommendations.push({
-      icon: '🛡️',
-      type: 'Safety',
-      text: 'Keep your seatbelt fastened when seated - this is standard safety practice'
-    });
-    
-    // Level-specific recommendations
-    switch (turbulenceLevel.toLowerCase()) {
-      case 'none':
-        recommendations.push({
-          icon: '☀️',
-          type: 'Conditions',
-          text: 'Excellent flying conditions - expect a smooth, comfortable flight'
-        });
-        recommendations.push({
-          icon: '📱',
-          type: 'Comfort',
-          text: 'Feel free to use electronic devices and move about the cabin'
-        });
-        break;
-        
-      case 'light':
-        recommendations.push({
-          icon: '🌤️',
-          type: 'What to Expect',
-          text: 'You may feel gentle movements - similar to driving on a slightly bumpy road'
-        });
-        recommendations.push({
-          icon: '💧',
-          type: 'Hydration',
-          text: 'Stay hydrated - this helps with any minor motion sensitivity'
-        });
-        break;
-        
-      case 'light to moderate':
-        recommendations.push({
-          icon: '🌤️',
-          type: 'What to Expect',
-          text: 'Some noticeable movement - like driving on a country road with occasional bumps'
-        });
-        recommendations.push({
-          icon: '🎵',
-          type: 'Comfort',
-          text: 'Listening to music or podcasts can help you relax during any bumps'
-        });
-        break;
-        
-      case 'moderate':
-        recommendations.push({
-          icon: '⛈️',
-          type: 'What to Expect',
-          text: 'Moderate movement - similar to driving on a gravel road. This is normal and safe'
-        });
-        recommendations.push({
-          icon: '🧘',
-          type: 'Relaxation',
-          text: 'Practice deep breathing - turbulence is temporary and your pilots are in control'
-        });
-        recommendations.push({
-          icon: '📚',
-          type: 'Distraction',
-          text: 'Reading or watching content can help take your mind off any movement'
-        });
-        break;
-        
-      case 'moderate to severe':
-        recommendations.push({
-          icon: '⛈️',
-          type: 'What to Expect',
-          text: 'More noticeable movement - like driving on a rough road. Still completely safe'
-        });
-        recommendations.push({
-          icon: '👨‍✈️',
-          type: 'Pilot Expertise',
-          text: 'Your pilots may adjust altitude or route to find smoother air'
-        });
-        recommendations.push({
-          icon: '💪',
-          type: 'Comfort',
-          text: 'Focus on the fact that millions of flights handle this safely every day'
-        });
-        break;
-        
-      case 'severe':
-        recommendations.push({
-          icon: '⚡',
-          type: 'What to Expect',
-          text: 'Significant movement - pilots will actively work to minimize this'
-        });
-        recommendations.push({
-          icon: '🔄',
-          type: 'Pilot Actions',
-          text: 'Your pilots will likely change altitude or route to find calmer conditions'
-        });
-        recommendations.push({
-          icon: '🛡️',
-          type: 'Safety First',
-          text: 'This is why we predict turbulence - so pilots can plan accordingly'
-        });
-        break;
-        
-      default:
-        recommendations.push({
-          icon: 'ℹ️',
-          type: 'General',
-          text: 'Your flight crew is monitoring conditions and will keep you informed'
-        });
-    }
-    
-    // Add route-specific recommendations
-    if (distance > 2000) {
-      recommendations.push({
-        icon: '🌍',
-        type: 'Long Flight',
-        text: 'On longer flights, pilots have more options to find optimal routes'
-      });
-    }
-    
-    if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
-      recommendations.push({
-        icon: '📡',
-        type: 'Advanced Warning',
-        text: 'G-AIRMET data gives pilots early warning to plan optimal routes'
-      });
-    }
-    
-    // Add comfort tips
-    recommendations.push({
-      icon: '🎯',
-      type: 'Remember',
-      text: 'Turbulence is normal weather - like bumps in the road. Airplanes are designed to handle all levels of turbulence'
-    });
-    
-    return recommendations;
-  }
-
   // Calculate dynamic confidence based on multiple factors
-  static calculateConfidence(weatherData, gairmetAdvisories, waypoints, distance) {
+  static calculateConfidence(weatherData, weatherAdvisories, waypoints, distance) {
     // Start with a completely random base confidence (35-75%)
     let confidence = 0.35 + (Math.random() * 0.4);
     
@@ -1631,22 +2236,27 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
     const weatherQualityVariation = (Math.random() - 0.5) * 0.20; // -10% to +10%
     confidence += weatherQualityVariation;
     
-    // Factor 2: G-AIRMET advisories impact (MAJOR FACTOR - can significantly boost or reduce confidence)
-    if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
-      const gairmetAnalysis = this.analyzeGAirmetImpact(gairmetAdvisories.advisories, weatherData);
+    // Factor 2: Weather advisories impact (G-AIRMETs + SIGMETs) (MAJOR FACTOR - can significantly boost or reduce confidence)
+    const advisoryData = this.getAdvisoriesFromFormat(weatherAdvisories);
+    if (advisoryData && advisoryData.hasAdvisories) {
+      const advisoryAnalysis = this.analyzeCombinedAdvisoryImpact(weatherAdvisories, weatherData);
       
-      // Dynamic base boost based on G-AIRMET severity and coverage
-      const advisoryCount = gairmetAdvisories.advisories.length;
-      const avgWeight = advisoryCount > 0 ? gairmetAnalysis.totalWeight / advisoryCount : 0;
+      // Dynamic base boost based on advisory severity and coverage
+      const advisoryCount = advisoryData.advisories.length;
+      const avgWeight = advisoryCount > 0 ? advisoryAnalysis.totalWeight / advisoryCount : 0;
+      
+      // SIGMETs provide higher confidence boost than G-AIRMETs due to their urgency and severity
+      const hasSigmets = advisoryAnalysis.hasSigmets || false;
+      const sigmetBoostMultiplier = hasSigmets ? 1.3 : 1.0; // 30% extra boost for SIGMETs
       
       // Base confidence boost varies by advisory quality (15-35%)
-      let baseGairmetBoost = 0.15 + (avgWeight * 0.15); // 15-30% base boost
+      let baseAdvisoryBoost = (0.15 + (avgWeight * 0.15)) * sigmetBoostMultiplier; // 15-30% base boost, increased for SIGMETs
       
-      // Additional variation based on specific G-AIRMET characteristics
+      // Additional variation based on specific advisory characteristics
       let dynamicBoost = 0;
       
       // Factor in severity levels - higher severity advisories get more confidence
-      const severityLevels = gairmetAdvisories.advisories.map(adv => {
+      const severityLevels = advisoryData.advisories.map(adv => {
         switch(adv.severity?.toLowerCase()) {
           case 'light': return 0.05;
           case 'moderate': return 0.10;
@@ -1657,7 +2267,7 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       dynamicBoost += severityLevels.reduce((sum, level) => sum + level, 0) / severityLevels.length;
       
       // Factor in altitude coverage - better coverage = higher confidence
-      const altitudeCoverage = gairmetAdvisories.advisories.map(adv => {
+      const altitudeCoverage = advisoryData.advisories.map(adv => {
         const altitude = adv.altitude || { min: 0, max: 999999 };
         const cruisingAltitude = 35000;
         const coverage = (Math.min(altitude.max, 45000) - Math.max(altitude.min, 25000)) / 20000;
@@ -1667,7 +2277,7 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       dynamicBoost += avgAltitudeCoverage * 0.12; // Up to 12% boost for altitude coverage
       
       // Factor in geographic coverage - more specific areas = higher confidence
-      const areaSpecificity = gairmetAdvisories.advisories.map(adv => {
+      const areaSpecificity = advisoryData.advisories.map(adv => {
         const area = adv.area || 'General area';
         if (area.includes('Central United States') || area.includes('Eastern United States')) return 0.08; // Specific regions
         if (area.includes('United States')) return 0.05; // General US
@@ -1684,15 +2294,21 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
       const freshnessFactor = Math.random() * 0.05; // 0-5% random variation for freshness
       dynamicBoost += freshnessFactor;
       
-      // Apply the total G-AIRMET confidence boost with additional variation
-      const totalGairmetBoost = baseGairmetBoost + dynamicBoost;
-      const gairmetVariation = (Math.random() - 0.5) * 0.08; // ±4% additional variation
-      confidence += Math.min(totalGairmetBoost + gairmetVariation, 0.45); // Cap at 45% total boost
+      // Additional boost for SIGMETs (they're more critical and immediate)
+      if (hasSigmets) {
+        dynamicBoost += 0.10; // Extra 10% confidence boost for SIGMET presence
+      }
+      
+      // Apply the total advisory confidence boost with additional variation
+      const totalAdvisoryBoost = baseAdvisoryBoost + dynamicBoost;
+      const advisoryVariation = (Math.random() - 0.5) * 0.08; // ±4% additional variation
+      const maxBoost = hasSigmets ? 0.50 : 0.45; // SIGMETs can boost up to 50%, G-AIRMETs up to 45%
+      confidence += Math.min(totalAdvisoryBoost + advisoryVariation, maxBoost);
       
     } else {
-      // No G-AIRMET data - add large random variation
-      const noGairmetVariation = (Math.random() - 0.5) * 0.15; // ±7.5% variation
-      confidence += noGairmetVariation;
+      // No advisory data - add large random variation
+      const noAdvisoryVariation = (Math.random() - 0.5) * 0.15; // ±7.5% variation
+      confidence += noAdvisoryVariation;
     }
     
     // Factor 3: Large random atmospheric factors (simulate real-world uncertainty)
@@ -1731,71 +2347,86 @@ Keep it clear, professional, and easy to understand. Reference specific geograph
     }
   }
 
-                                 // Generate user-friendly turbulence factors for high-altitude flight
-               static generateTurbulenceFactors(turbulenceLevel, weatherData, gairmetAdvisories = null) {
-                const factors = [];
-                
-                switch (turbulenceLevel) {
-                  case 'Light':
-                    factors.push('Stable high-altitude atmospheric conditions');
-                    factors.push('Normal cruising winds at 30,000+ feet');
-                    factors.push('Smooth flying conditions expected');
-                    break;
-                  case 'Light to Moderate':
-                    factors.push('Some wind variations at cruising altitude');
-                    factors.push('Minor atmospheric instability');
-                    factors.push('Generally comfortable flying conditions');
-                    break;
-                  case 'Moderate':
-                    factors.push('Moderate wind speeds at cruising altitude');
-                    factors.push('Some atmospheric instability present');
-                    factors.push('Passengers may notice some movement');
-                    break;
-                  case 'Moderate to Severe':
-                    factors.push('Strong wind patterns at cruising altitude');
-                    factors.push('Significant atmospheric instability');
-                    factors.push('Pilots may consider route adjustments');
-                    break;
-                  case 'Severe':
-                    factors.push('High wind speeds and severe turbulence');
-                    factors.push('Major atmospheric disturbances');
-                    factors.push('Route diversion recommended if possible');
-                    break;
-                  default:
-                    factors.push('Weather data unavailable for analysis');
-                }
-                
-                // Add G-AIRMET specific factors if available
-                if (gairmetAdvisories && gairmetAdvisories.hasAdvisories) {
-                  const gairmetAnalysis = this.analyzeGAirmetImpact(gairmetAdvisories.advisories, weatherData);
-                  
-                  factors.push('Official G-AIRMET turbulence advisory in effect');
-                  factors.push(`G-AIRMET analysis indicates ${gairmetAnalysis.recommendedLevel} turbulence`);
-                  
-                  // Add specific advisory details
-                  gairmetAdvisories.advisories.forEach(advisory => {
-                    if (advisory.hazard === 'Turbulence') {
-                      const altitudeRange = advisory.altitude ? 
-                        `FL${Math.round(advisory.altitude.min/100)}-FL${Math.round(advisory.altitude.max/100)}` : 
-                        'cruising altitude';
-                      factors.push(`G-AIRMET: ${advisory.severity} turbulence in ${advisory.area} at ${altitudeRange}`);
-                    }
-                  });
-                  
-                  // Add confidence factor based on G-AIRMET quality
-                  if (gairmetAnalysis.totalWeight > 2.0) {
-                    factors.push('High-confidence G-AIRMET data (multiple high-quality advisories)');
-                  } else if (gairmetAnalysis.totalWeight > 1.5) {
-                    factors.push('Medium-confidence G-AIRMET data (good advisory coverage)');
-                  } else {
-                    factors.push('Limited G-AIRMET coverage (fewer advisories)');
-                  }
-                } else {
-                  factors.push('No active G-AIRMET advisories (prediction based on weather models only)');
-                }
-                
-                return factors;
-              }
+  // Generate user-friendly turbulence factors for high-altitude flight
+  static generateTurbulenceFactors(turbulenceLevel, weatherData, weatherAdvisories = null) {
+    const factors = [];
+    
+    switch (turbulenceLevel) {
+      case 'Light':
+        factors.push('Stable high-altitude atmospheric conditions');
+        factors.push('Normal cruising winds at 30,000+ feet');
+        factors.push('Smooth flying conditions expected');
+        break;
+      case 'Light to Moderate':
+        factors.push('Some wind variations at cruising altitude');
+        factors.push('Minor atmospheric instability');
+        factors.push('Generally comfortable flying conditions');
+        break;
+      case 'Moderate':
+        factors.push('Moderate wind speeds at cruising altitude');
+        factors.push('Some atmospheric instability present');
+        factors.push('Passengers may notice some movement');
+        break;
+      case 'Moderate to Severe':
+        factors.push('Strong wind patterns at cruising altitude');
+        factors.push('Significant atmospheric instability');
+        factors.push('Pilots may consider route adjustments');
+        break;
+      case 'Severe':
+        factors.push('High wind speeds and severe turbulence');
+        factors.push('Major atmospheric disturbances');
+        factors.push('Route diversion recommended if possible');
+        break;
+      default:
+        factors.push('Weather data unavailable for analysis');
+    }
+    
+    // Add weather advisory specific factors if available (G-AIRMETs + SIGMETs)
+    if (!weatherAdvisories) {
+      factors.push('No active weather advisories (prediction based on weather models only)');
+      return factors;
+    }
+    
+    const advisoryData = this.getAdvisoriesFromFormat(weatherAdvisories);
+    if (advisoryData && advisoryData.hasAdvisories) {
+      const advisoryAnalysis = this.analyzeCombinedAdvisoryImpact(weatherAdvisories, weatherData);
+      
+      // Check for SIGMETs first (higher priority)
+      const sigmets = advisoryData.advisories.filter(a => a.type === 'SIGMET');
+      const gairmets = advisoryData.advisories.filter(a => a.type === 'G-AIRMET');
+      
+      if (sigmets.length > 0) {
+        factors.push('URGENT: SIGMET turbulence advisory in effect');
+        factors.push(`SIGMET analysis indicates ${advisoryAnalysis.recommendedLevel} turbulence`);
+      } else {
+        factors.push('Official G-AIRMET turbulence advisory in effect');
+        factors.push(`G-AIRMET analysis indicates ${advisoryAnalysis.recommendedLevel} turbulence`);
+      }
+      
+      // Add specific advisory details
+      advisoryData.advisories.forEach(advisory => {
+        const hazard = advisory.hazard || advisory.hazardType || '';
+        if (hazard === 'Turbulence' || hazard.toLowerCase().includes('turbulence')) {
+          const altitudeRange = advisory.altitude ? 
+            `FL${Math.round(advisory.altitude.min/100)}-FL${Math.round(advisory.altitude.max/100)}` : 
+            'cruising altitude';
+          const advisoryType = advisory.type === 'SIGMET' ? 'SIGMET' : 'G-AIRMET';
+          factors.push(`${advisoryType}: ${advisory.severity} turbulence in ${advisory.area} at ${altitudeRange}`);
+        }
+      });
+      
+      // Add confidence factor based on advisory quality
+      if (advisoryAnalysis.totalWeight > 2.0) {
+        factors.push('High-confidence advisory data (multiple high-quality advisories)');
+      } else if (advisoryAnalysis.totalWeight > 1.5) {
+        factors.push('Medium-confidence advisory data (good coverage)');
+      } else {
+        factors.push('Limited advisory coverage (fewer advisories)');
+      }
+    }
+    
+    return factors;
+  }
 }
 
 module.exports = SimpleRouteService;

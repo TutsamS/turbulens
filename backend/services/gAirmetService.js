@@ -1,5 +1,25 @@
 const axios = require('axios');
 
+/**
+ * ============================================================================
+ * G-AIRMET ALTITUDE CONVERSION STANDARD
+ * ============================================================================
+ * 
+ * The G-AIRMET API returns altitudes in FLIGHT LEVELS (hundreds of feet):
+ * - FL180 is represented as 180
+ * - FL240 is represented as 240
+ * - FL450 is represented as 450
+ * 
+ * This service ALWAYS converts these to ACTUAL FEET before passing data forward:
+ * - Input: 180 → Output: 18,000 feet
+ * - Input: 240 → Output: 24,000 feet
+ * - Input: 450 → Output: 45,000 feet
+ * 
+ * Exception: XML data with 'min_ft_msl' and 'max_ft_msl' attributes are
+ * already in feet and should NOT be converted.
+ * ============================================================================
+ */
+
 class GAirmetService {
   // Base URLs for G-AIRMET data sources (updated for 2024 API)
   static BASE_URLS = {
@@ -86,12 +106,24 @@ class GAirmetService {
       const properties = feature.properties || {};
       const geometry = feature.geometry || {};
       
+      // Handle altitude from GeoJSON properties
+      // If altitude is provided in properties, it should be validated/normalized
+      let altitude = properties.altitude || { min: 0, max: 999999 };
+      
+      // If altitude values look like flight levels (< 1000), convert to feet
+      if (altitude.min > 0 && altitude.min < 1000) {
+        altitude = {
+          min: altitude.min * 100,
+          max: altitude.max * 100
+        };
+      }
+      
       return {
         product: 'G-AIRMET',
         validTime: properties.validTime || new Date().toISOString(),
         hazardType: this.normalizeHazardType(properties.hazard || properties.type),
         severity: this.normalizeSeverity(properties.severity),
-        altitude: properties.altitude || { min: 0, max: 999999 },
+        altitude: altitude,
         coordinates: geometry.coordinates || [],
         area: properties.area || 'Area not specified',
         rawData: feature
@@ -117,10 +149,12 @@ class GAirmetService {
       }
 
       // Extract altitude information
+      // CRITICAL: G-AIRMET API returns altitudes in HUNDREDS OF FEET (Flight Levels)
+      // E.g., base=180 means FL180 = 18,000 feet. We must convert to actual feet.
       let altitude = { min: 0, max: 999999 };
       if (gairmet.top || gairmet.base) {
-        const minAlt = gairmet.base ? parseInt(gairmet.base) : 0;
-        const maxAlt = gairmet.top ? parseInt(gairmet.top) : 999999;
+        const minAlt = gairmet.base ? parseInt(gairmet.base) * 100 : 0;  // Convert FL to feet
+        const maxAlt = gairmet.top ? parseInt(gairmet.top) * 100 : 999999;  // Convert FL to feet
         altitude = {
           min: isNaN(minAlt) ? 0 : minAlt,
           max: isNaN(maxAlt) ? 999999 : maxAlt
@@ -275,13 +309,15 @@ class GAirmetService {
 
   // Extract altitude information from the altitude tag
   static extractAltitudeInfo(xmlString) {
+    // XML altitude attributes use min_ft_msl and max_ft_msl
+    // These values are ALREADY in feet (ft_msl = feet above mean sea level)
     const altitudeMatch = xmlString.match(/<altitude\s+min_ft_msl="([^"]+)"\s+max_ft_msl="([^"]+)"/i);
     if (altitudeMatch) {
       const minAlt = parseInt(altitudeMatch[1]);
       const maxAlt = parseInt(altitudeMatch[2]);
       return {
-        min: isNaN(minAlt) ? 0 : minAlt,
-        max: isNaN(maxAlt) ? 999999 : maxAlt
+        min: isNaN(minAlt) ? 0 : minAlt,  // Already in feet
+        max: isNaN(maxAlt) ? 999999 : maxAlt  // Already in feet
       };
     }
     return { min: 0, max: 999999 };

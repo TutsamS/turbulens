@@ -147,10 +147,18 @@
 }
 
 .spectrum-item.predicted {
-  border-color: var(--turbulence-color);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
   background: var(--turbulence-gradient);
+  border: 3px solid var(--turbulence-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 3px var(--turbulence-color)40;
   transform: scale(1.05);
+  filter: brightness(1.05);
+}
+
+.spectrum-item.predicted .spectrum-icon,
+.spectrum-item.predicted .spectrum-level,
+.spectrum-item.predicted .spectrum-description {
+  color: #1e293b;
+  font-weight: 600;
 }
 
 .spectrum-icon {
@@ -337,9 +345,7 @@
   align-items: center;
   gap: 16px;
   padding: 16px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
 }
 
 .prediction-icon {
@@ -361,14 +367,15 @@
 .prediction-level {
   font-size: 20px;
   font-weight: 700;
-  color: #1e293b;
   margin-bottom: 4px;
+  /* Color is inherited from parent or set via inline styles */
 }
 
 .prediction-subtitle {
   font-size: 13px;
-  color: #64748b;
   line-height: 1.4;
+  opacity: 0.9;
+  /* Color is inherited from parent or set via inline styles */
 }
 
 /* Responsive design for mobile devices */
@@ -426,8 +433,7 @@
   }
 }
 
-.factors h3,
-.recommendations h3 {
+.factors h3 {
   color: #2d3748;
   margin-bottom: 16px;
   font-size: 18px;
@@ -469,32 +475,6 @@
   margin-top: 2px;
 }
 
-.recommendation-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-}
-
-.rec-card {
-  background: #f8fafc;
-  padding: 16px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-
-.rec-card h4 {
-  color: #2d3748;
-  margin-bottom: 8px;
-  font-size: 16px;
-}
-
-.rec-card p {
-  color: #718096;
-  font-size: 14px;
-  margin: 0;
-  line-height: 1.4;
-}
-
 @media (max-width: 768px) {
   .header-top {
     flex-direction: column;
@@ -510,10 +490,6 @@
   
   .confidence {
     align-items: flex-start;
-  }
-  
-  .recommendation-cards {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -1087,6 +1063,10 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+.advisory-card.sigmet-card {
+  border-left: 4px solid #7c2d12;
+}
+
 .advisory-header {
   display: flex;
   justify-content: space-between;
@@ -1104,6 +1084,10 @@
   font-size: 0.875rem;
   font-weight: 600;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.advisory-type.sigmet-type {
+  background: #7c2d12;
 }
 
 .advisory-severity {
@@ -1207,12 +1191,6 @@
 .impact-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.card-icon {
-  font-size: 2rem;
-  margin-bottom: 12px;
-  display: block;
 }
 
 .impact-card h5 {
@@ -1706,8 +1684,8 @@
   background: white;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
-  padding: 16px;
-  min-width: 200px;
+  padding: 20px;
+  min-width: 240px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -1746,18 +1724,21 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .phase-info .info-label {
   color: #64748b;
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .phase-info .info-value {
   color: #1e293b;
   font-size: 14px;
   font-weight: 600;
+  text-align: right;
 }
 
 /* Turbulence badge styles for phases */

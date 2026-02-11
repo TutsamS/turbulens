@@ -121,15 +121,13 @@ function TurbulencePrediction({ data }) {
                         <div className="phase-info">
                           <span className="info-label">Altitude:</span>
                           <span className="info-value">
-                            {phase.phaseType === 'descent' 
-                              ? `${Math.round(phase.altitudeRange.max/1000)}k - ${Math.round(phase.altitudeRange.min/1000)}k ft`
-                              : `${Math.round(phase.altitudeRange.min/1000)}k - ${Math.round(phase.altitudeRange.max/1000)}k ft`
+                            {phase.phaseType === 'cruise' && phase.altitudeRange.min === phase.altitudeRange.max
+                              ? `± ${phase.altitudeRange.min.toLocaleString()} ft`
+                              : phase.phaseType === 'descent' 
+                                ? `${phase.altitudeRange.max.toLocaleString()} - ${phase.altitudeRange.min.toLocaleString()} ft`
+                                : `${phase.altitudeRange.min.toLocaleString()} - ${phase.altitudeRange.max.toLocaleString()} ft`
                             }
                           </span>
-                        </div>
-                        <div className="phase-info">
-                          <span className="info-label">Waypoints:</span>
-                          <span className="info-value">{phase.waypoints}</span>
                         </div>
                       </div>
                     </div>
@@ -172,9 +170,21 @@ function TurbulencePrediction({ data }) {
                     </span>
                   </div>
                   <div className="breakdown-item">
-                    <span className="breakdown-label">G-AIRMET Advisories:</span>
+                    <span className="breakdown-label">Weather Advisories:</span>
                     <span className="breakdown-value">
-                      {data.gairmetAdvisories?.hasAdvisories ? `${data.gairmetAdvisories.advisories.length} active` : 'None detected'}
+                      {(() => {
+                        const gairmetCount = data.gairmetAdvisories?.hasAdvisories ? data.gairmetAdvisories.advisories.length : 0;
+                        const sigmetCount = data.sigmetAdvisories?.hasAdvisories ? data.sigmetAdvisories.advisories.length : 0;
+                        const totalCount = gairmetCount + sigmetCount;
+                        
+                        if (totalCount === 0) return 'None detected';
+                        
+                        const parts = [];
+                        if (gairmetCount > 0) parts.push(`${gairmetCount} G-AIRMET${gairmetCount > 1 ? 's' : ''}`);
+                        if (sigmetCount > 0) parts.push(`${sigmetCount} SIGMET${sigmetCount > 1 ? 's' : ''}`);
+                        
+                        return parts.join(', ');
+                      })()}
                     </span>
                   </div>
                   <div className="breakdown-item">
@@ -194,14 +204,23 @@ function TurbulencePrediction({ data }) {
             </div>
             </div>
             
-            <div className="current-prediction">
-              <div className="prediction-icon">
+            <div 
+              className="current-prediction"
+              style={{
+                background: `linear-gradient(135deg, ${getTurbulenceColor(data.turbulenceLevel)}15, ${getTurbulenceColor(data.turbulenceLevel)}35)`,
+                border: `3px solid ${getTurbulenceColor(data.turbulenceLevel)}`,
+                boxShadow: `0 4px 12px -2px ${getTurbulenceColor(data.turbulenceLevel)}60`
+              }}
+            >
+              <div className="prediction-icon" style={{ fontSize: '48px' }}>
                 {getTurbulenceIcon(data.turbulenceLevel)}
               </div>
               <div className="prediction-details">
-                <div className="prediction-level">{data.turbulenceLevel.charAt(0).toUpperCase() + data.turbulenceLevel.slice(1)}</div>
-                <div className="prediction-subtitle">
-                  Based on current weather patterns and G-AIRMET data
+                <div className="prediction-level" style={{ color: '#1e293b', fontWeight: '700', fontSize: '20px' }}>
+                  {data.turbulenceLevel.charAt(0).toUpperCase() + data.turbulenceLevel.slice(1)}
+                </div>
+                <div className="prediction-subtitle" style={{ color: '#64748b', fontSize: '13px' }}>
+                  Based on weather data and aviation advisories (G-AIRMETs/SIGMETs)
                 </div>
               </div>
             </div>
@@ -211,12 +230,9 @@ function TurbulencePrediction({ data }) {
         <div id="disclaimer" className="high-altitude-disclaimer">
           <div className="disclaimer-icon">⚠️</div>
           <div className="disclaimer-content">
-            <h4>High-Altitude Flight Disclaimer</h4>
+            <h4>Prediction Accuracy & Limitations</h4>
             <p>
-              <strong>Important:</strong> These predictions are based on weather data at cruising altitude (30,000+ feet) 
-              where wind speeds are significantly higher than ground level. Pilots can reroute around reported turbulence 
-              but <strong>cannot avoid clear-air turbulence</strong>, which occurs in cloudless conditions and is often 
-              undetectable by radar.
+              <strong>Important:</strong> These predictions analyze weather data across multiple altitude bands (surface to 40,000 feet) and incorporate official aviation weather advisories (G-AIRMETs and SIGMETs) when available. However, turbulence predictions may be less accurate due to: <strong>(1)</strong> limited weather data coverage in remote areas, <strong>(2)</strong> rapidly changing atmospheric conditions, <strong>(3)</strong> clear-air turbulence which is difficult to detect and predict, and <strong>(4)</strong> local weather phenomena not captured by global weather models. G-AIRMETs are only available in the United States. Predictions are most reliable for routes with active weather advisories and comprehensive weather data coverage.
             </p>
           </div>
         </div>
@@ -313,7 +329,7 @@ function TurbulencePrediction({ data }) {
            </div>
          )}
 
-         {/* G-AIRMET Information Section - Consolidated and Organized */}
+         {/* G-AIRMET & SIGMET Information Section - Consolidated and Organized */}
          <div id="gairmet" className="gairmet-section">
            <div className="section-header">
              <img 
@@ -321,56 +337,93 @@ function TurbulencePrediction({ data }) {
                alt="NWS Logo" 
                className="nws-logo-small"
              />
-             <h3>G-AIRMET Weather Information</h3>
+             <h3>G-AIRMET & SIGMET Weather Information</h3>
            </div>
            
-           {/* G-AIRMET Advisories - Compact Cards */}
-           {data.gairmetAdvisories && data.gairmetAdvisories.hasAdvisories && (
+           {/* Combined G-AIRMET & SIGMET Advisories - Compact Cards */}
+           {((data.gairmetAdvisories && data.gairmetAdvisories.hasAdvisories) || (data.sigmetAdvisories && data.sigmetAdvisories.hasAdvisories)) && (
              <div className="advisories-section">
-               <h4>Active Advisories on Your Route</h4>
+               <h4>Active Weather Advisories on Your Route</h4>
                <div className="advisory-cards">
-                 {data.gairmetAdvisories.advisories.map((advisory, index) => (
-                   <div key={index} className="advisory-card">
-                     <div className="advisory-header">
-                       <span className="advisory-type">{advisory.type}</span>
-                       <span className={`advisory-severity ${advisory.severity.toLowerCase()}`}>
-                         {advisory.severity}
-                       </span>
+                 {/* G-AIRMET Advisories */}
+                 {data.gairmetAdvisories && data.gairmetAdvisories.hasAdvisories && 
+                   data.gairmetAdvisories.advisories.map((advisory, index) => (
+                     <div key={`gairmet-${index}`} className="advisory-card">
+                       <div className="advisory-header">
+                         <span className="advisory-type">{advisory.type}</span>
+                         <span className={`advisory-severity ${advisory.severity.toLowerCase()}`}>
+                           {advisory.severity}
+                         </span>
+                       </div>
+                       <div className="advisory-details">
+                         <div className="detail-row">
+                           <span className="detail-label">Hazard:</span>
+                           <span className="detail-value">{advisory.hazard}</span>
+                         </div>
+                         <div className="detail-row">
+                           <span className="detail-label">Area:</span>
+                           <span className="detail-value">{advisory.area || 'General area along route'}</span>
+                         </div>
+                        <div className="detail-row">
+                          <span className="detail-label">Altitude:</span>
+                          <span className="detail-value">{advisory.altitude.min.toLocaleString()}-{advisory.altitude.max.toLocaleString()} feet</span>
+                        </div>
+                         <div className="detail-row">
+                           <span className="detail-label">Valid:</span>
+                           <span className="detail-value">{new Date(advisory.validTime).toLocaleString()}</span>
+                         </div>
+                         <a href="https://aviationweather.gov/gfa/#gairmet" target="_blank" rel="noopener noreferrer" className="map-link">
+                           View on Map
+                         </a>
+                       </div>
                      </div>
-                     <div className="advisory-details">
-                       <div className="detail-row">
-                         <span className="detail-label">Hazard:</span>
-                         <span className="detail-value">{advisory.hazard}</span>
+                   ))
+                 }
+                 
+                 {/* SIGMET Advisories */}
+                 {data.sigmetAdvisories && data.sigmetAdvisories.hasAdvisories && 
+                   data.sigmetAdvisories.advisories.map((advisory, index) => (
+                     <div key={`sigmet-${index}`} className="advisory-card sigmet-card">
+                       <div className="advisory-header">
+                         <span className="advisory-type sigmet-type">{advisory.type}</span>
+                         <span className={`advisory-severity ${advisory.severity.toLowerCase()}`}>
+                           {advisory.severity}
+                         </span>
                        </div>
-                       <div className="detail-row">
-                         <span className="detail-label">Area:</span>
-                         <span className="detail-value">{advisory.area || 'General area along route'}</span>
+                       <div className="advisory-details">
+                         <div className="detail-row">
+                           <span className="detail-label">Hazard:</span>
+                           <span className="detail-value">{advisory.hazardType || advisory.hazard}</span>
+                         </div>
+                         <div className="detail-row">
+                           <span className="detail-label">Area:</span>
+                           <span className="detail-value">{advisory.area || 'General area along route'}</span>
+                         </div>
+                         <div className="detail-row">
+                           <span className="detail-label">Altitude:</span>
+                           <span className="detail-value">{advisory.altitude.min.toLocaleString()}-{advisory.altitude.max.toLocaleString()} feet</span>
+                         </div>
+                         <div className="detail-row">
+                           <span className="detail-label">Valid:</span>
+                           <span className="detail-value">{new Date(advisory.validTime).toLocaleString()}</span>
+                         </div>
+                         <a href="https://aviationweather.gov/gfa/#sigmet" target="_blank" rel="noopener noreferrer" className="map-link">
+                           View on Map
+                         </a>
                        </div>
-                       <div className="detail-row">
-                         <span className="detail-label">Altitude:</span>
-                         <span className="detail-value">{advisory.altitude.min*100}-{advisory.altitude.max*100} feet</span>
-                       </div>
-                       <div className="detail-row">
-                         <span className="detail-label">Valid:</span>
-                         <span className="detail-value">{new Date(advisory.validTime).toLocaleString()}</span>
-                       </div>
-                       <a href="https://aviationweather.gov/gfa/#gairmet" target="_blank" rel="noopener noreferrer" className="map-link">
-                         View on Map
-                       </a>
                      </div>
-                   </div>
-                 ))}
+                   ))
+                 }
                </div>
              </div>
            )}
 
            {/* Flight Planning Impact - Organized Cards */}
-           {data.gairmetAdvisories && data.gairmetAdvisories.hasAdvisories && (
+           {((data.gairmetAdvisories && data.gairmetAdvisories.hasAdvisories) || (data.sigmetAdvisories && data.sigmetAdvisories.hasAdvisories)) && (
              <div className="impact-section">
                <h4>How This Affects Your Flight</h4>
                <div className="impact-cards">
                  <div className="impact-card">
-                   <div className="card-icon">✈️</div>
                    <h5>Pilot Planning</h5>
                    <p>Your pilots will actively avoid these areas by:</p>
                    <ul>
@@ -381,7 +434,6 @@ function TurbulencePrediction({ data }) {
                  </div>
                  
                  <div className="impact-card">
-                   <div className="card-icon">🌤️</div>
                    <h5>Your Experience</h5>
                    <p>Your flight may be smoother than predicted because:</p>
                    <ul>
@@ -392,7 +444,6 @@ function TurbulencePrediction({ data }) {
                  </div>
                  
                  <div className="impact-card">
-                   <div className="card-icon">🎯</div>
                    <h5>Bottom Line</h5>
                    <p>The prediction shows potential conditions if flying directly through weather systems. Your pilots will likely navigate around these areas for a smoother experience.</p>
                  </div>
@@ -400,17 +451,22 @@ function TurbulencePrediction({ data }) {
              </div>
            )}
            
-           {/* G-AIRMET Explanation - Collapsible */}
+           {/* G-AIRMET & SIGMET Explanation - Collapsible */}
            <div className="explanation-section">
              <details className="explanation-dropdown">
                <summary className="explanation-summary">
-                 <span>What Are G-AIRMETs?</span>
+                 <span>What Are G-AIRMETs & SIGMETs?</span>
                  <span className="summary-icon">▼</span>
                </summary>
                <div className="explanation-content">
                  <p>
-                   <strong>G-AIRMETs (Graphical AIRMETs)</strong> are official aviation weather advisories that identify potentially hazardous weather conditions for aircraft. These advisories are updated every 6 hours and give pilots advanced warning to plan safe, comfortable routes. They are only available in the United States. 
+                   <strong>G-AIRMETs (Graphical AIRMETs)</strong> are official aviation weather advisories that identify potentially hazardous weather conditions for aircraft. These advisories are updated every 6 hours and give pilots advanced warning to plan safe, comfortable routes. They are only available in the United States.
                  </p>
+                 <p>
+                   <strong>SIGMETs (Significant Meteorological Information)</strong> are more severe weather advisories that warn of conditions potentially hazardous to all aircraft. SIGMETs are issued for weather phenomena that may affect the safety of flight operations, including severe turbulence, severe icing, and volcanic ash. They are issued as needed and are available worldwide.
+                 </p>
+                 
+                 <h4 style={{ color: '#1e293b', fontSize: '16px', fontWeight: '600', marginTop: '20px', marginBottom: '12px' }}>Advisory Types:</h4>
                  <div className="gairmet-types">
                    <div className="type-item">
                      <span className="type-icon"></span>
@@ -428,13 +484,25 @@ function TurbulencePrediction({ data }) {
                      <span className="type-icon"></span>
                      <span><strong>Wind Shear</strong> - Sudden wind changes</span>
                    </div>
+                   <div className="type-item">
+                     <span className="type-icon"></span>
+                     <span><strong>Convective Activity</strong> - Thunderstorms and severe weather</span>
+                   </div>
+                   <div className="type-item">
+                     <span className="type-icon"></span>
+                     <span><strong>Volcanic Ash</strong> - Airborne volcanic debris</span>
+                   </div>
                  </div>
                  
                  <div className="official-link">
                    <p>
-                     <strong>Official G-AIRMET Map:</strong> View the current G-AIRMET advisories on the official 
+                     <strong>Official Maps:</strong> View current advisories on the official NWS Aviation Weather Center:
                      <a href="https://aviationweather.gov/gfa/#gairmet" target="_blank" rel="noopener noreferrer">
-                        NWS Aviation Weather Center map
+                        G-AIRMET Map
+                     </a>
+                     and
+                     <a href="https://aviationweather.gov/gfa/#sigmet" target="_blank" rel="noopener noreferrer">
+                        SIGMET Map
                      </a>
                      .
                    </p>
@@ -442,36 +510,6 @@ function TurbulencePrediction({ data }) {
                </div>
              </details>
            </div>
-        </div>
-
-        <div id="recommendations" className="recommendations">
-          <h3>Recommendations</h3>
-          <div className="recommendation-cards">
-            {data.recommendations && data.recommendations.length > 0 ? (
-              data.recommendations.map((rec, index) => (
-                <div key={index} className="rec-card">
-                  <h4>{rec.icon} {rec.type}</h4>
-                  <p>{rec.text}</p>
-                </div>
-              ))
-            ) : (
-              // Fallback recommendations if none provided
-              <>
-                <div className="rec-card">
-                  <h4>🛡️ Safety</h4>
-                  <p>Keep seatbelt fastened throughout the flight</p>
-                </div>
-                <div className="rec-card">
-                  <h4>📅 Updates</h4>
-                  <p>Check for real-time weather updates</p>
-                </div>
-                <div className="rec-card">
-                  <h4>⏰ Timing</h4>
-                  <p>Consider alternative departure times if possible</p>
-                </div>
-              </>
-            )}
-          </div>
         </div>
       </div>
     </div>

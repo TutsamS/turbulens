@@ -74,11 +74,17 @@ class AirportService {
         this.lastFetch = Date.now();
       }
 
-      // Find the airport by IATA code
-      const airport = this.airportsData.find(a => a.iata === airportCode.toUpperCase());
+      // Find the airport by IATA or ICAO code
+      const codeUpper = airportCode.toUpperCase();
+      const airport = this.airportsData.find(a => 
+        a.iata === codeUpper || a.icao === codeUpper
+      );
+      
       if (airport && airport.latitude && airport.longitude) {
         return {
-          code: airport.iata,
+          code: airport.iata || airport.icao, // Prefer IATA, fallback to ICAO
+          icao: airport.icao,
+          iata: airport.iata,
           name: airport.name,
           city: airport.city,
           country: airport.country,
@@ -260,7 +266,7 @@ class AirportService {
     return null;
   }
 
-  // Search airports by name or city
+  // Search airports by IATA, ICAO, name, or city with smart prioritization
   async searchAirports(query) {
     try {
       // Ensure OurAirports data is loaded
@@ -270,22 +276,74 @@ class AirportService {
       
       // Use OurAirports data for search if available
       if (this.airportsData) {
-        const results = this.airportsData
-          .filter(airport => 
-            airport.iata && 
-            (airport.name.toLowerCase().includes(query.toLowerCase()) ||
-             airport.city.toLowerCase().includes(query.toLowerCase()) ||
-             airport.iata.toLowerCase().includes(query.toLowerCase()))
-          )
-          .slice(0, 10) // Limit to 10 results
-          .map(airport => ({
-            code: airport.iata,
-            name: airport.name,
-            city: airport.city,
-            country: airport.country
-          }));
+        const queryLower = query.toLowerCase().trim();
+        const queryUpper = query.toUpperCase().trim();
         
-        return results;
+        // Filter airports that match the query
+        const matchedAirports = this.airportsData
+          .filter(airport => {
+            if (!airport.iata && !airport.icao) return false;
+            
+            const iata = (airport.iata || '').toUpperCase();
+            const icao = (airport.icao || '').toUpperCase();
+            const name = (airport.name || '').toLowerCase();
+            const city = (airport.city || '').toLowerCase();
+            
+            return (
+              iata === queryUpper ||                    // Exact IATA match
+              icao === queryUpper ||                    // Exact ICAO match
+              iata.startsWith(queryUpper) ||            // IATA starts with query
+              icao.startsWith(queryUpper) ||            // ICAO starts with query
+              name.includes(queryLower) ||              // Name contains query
+              city.includes(queryLower)                 // City contains query
+            );
+          })
+          .map(airport => {
+            // Calculate priority score for sorting
+            const iata = (airport.iata || '').toUpperCase();
+            const icao = (airport.icao || '').toUpperCase();
+            const name = (airport.name || '').toLowerCase();
+            const city = (airport.city || '').toLowerCase();
+            
+            let priority = 0;
+            
+            // Highest priority: Exact IATA or ICAO match
+            if (iata === queryUpper) priority = 1000;
+            else if (icao === queryUpper) priority = 900;
+            
+            // High priority: Code starts with query
+            else if (iata.startsWith(queryUpper)) priority = 800;
+            else if (icao.startsWith(queryUpper)) priority = 700;
+            
+            // Medium priority: Name starts with query
+            else if (name.startsWith(queryLower)) priority = 600;
+            else if (city.startsWith(queryLower)) priority = 500;
+            
+            // Lower priority: Name or city contains query
+            else if (name.includes(queryLower)) priority = 400;
+            else if (city.includes(queryLower)) priority = 300;
+            
+            // Prefer airports with IATA codes over ICAO-only
+            if (airport.iata) priority += 50;
+            
+            return {
+              code: airport.iata || airport.icao,
+              icao: airport.icao,
+              iata: airport.iata,
+              name: airport.name,
+              city: airport.city,
+              country: airport.country,
+              priority: priority
+            };
+          })
+          // Sort by priority (highest first)
+          .sort((a, b) => b.priority - a.priority)
+          // Limit to top 10 results
+          .slice(0, 10)
+          // Remove priority field from final results
+          .map(({ priority, ...airport }) => airport);
+        
+        return matchedAirports;
       }
     } catch (error) {
       console.error('Search error:', error.message);

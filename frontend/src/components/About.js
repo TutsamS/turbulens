@@ -43,7 +43,6 @@ function About({ isOpen, onClose }) {
                   <li>Accurate turbulence predictions</li>
                   <li>Real-time weather analysis</li>
                   <li>Detailed flight path visualization</li>
-                  <li>Safety recommendations</li>
                   <li>Confidence scores for predictions</li>
                 </ul>
               </div>
