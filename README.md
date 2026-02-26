@@ -4,6 +4,12 @@
 
 TurbuLens is an AI-powered flight turbulence prediction system that analyzes real-time weather data and official aviation advisories to provide accurate, personalized turbulence forecasts for nervous flyers.
 
+## Demo
+
+<p align="center">
+  <img src="demogif/TurbuLensWalkthrough.gif" width="900"/>
+</p>
+
 ## Features
 
 - **AI-Powered Turbulence Predictions**: GPT-4o-mini analyzes weather data and aviation advisories
