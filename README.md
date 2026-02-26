@@ -7,9 +7,7 @@ TurbuLens is an AI-powered flight turbulence prediction system that analyzes rea
 ## Demo
 
 <p align="center">
-  <video width="900" autoplay loop muted playsinline>
-    <source src="demo/TurbuLensDemo.mp4" type="video/mp4">
-  </video>
+  <img src="https://i.imgur.com/UNEjKyP.gif" width="900"/>
 </p>
 
 ## Features
