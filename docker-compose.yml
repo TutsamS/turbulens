@@ -13,10 +13,12 @@ services:
       - PORT=5001
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
       - AI_API_KEY=${AI_API_KEY}
+      - TZ=America/Los_Angeles
     volumes:
       # Mount source code for development (hot reload)
       - ./backend:/app
       - /app/node_modules
+      - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
     networks:
       - turbulens-network
